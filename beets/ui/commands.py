@@ -213,7 +213,9 @@ def penalty_string(distance, limit=None):
     if penalties:
         if limit and len(penalties) > limit:
             penalties = penalties[:limit] + ['...']
-        return ui.colorize('text_warning', u'(%s)' % ', '.join(penalties))
+        # Prefix penalty string with U+2260: Not Equal To
+        penalty_string = u'\u2260 %s' % ', '.join(penalties)
+        return ui.colorize('changed', penalty_string)
 
 
 def show_change(cur_artist, cur_album, match):
