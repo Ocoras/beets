@@ -196,6 +196,18 @@ def should_move(move_opt=None):
 
 # Input prompts.
 
+def indent(count):
+    """Indents string with spaces.
+    """
+    return u' ' * count
+
+
+def indent_str(count, string):
+    """Indents string with spaces.
+    """
+    return indent(count) + string
+
+
 def input_(prompt=None):
     """Like `input`, but decodes the result to a Unicode string.
     Raises a UserError if stdin is not available. The prompt is sent to
