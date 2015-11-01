@@ -294,8 +294,11 @@ def input_options(options, require=False, prompt=None, fallback_prompt=None,
                                show_letter)
 
         # Insert the highlighted letter back into the word.
+        descr_color = 'action_default' if is_default else 'action_description'
         capitalized.append(
-            option[:index] + show_letter + option[index + 1:]
+            colorize(descr_color, option[:index]) +
+            show_letter +
+            colorize(descr_color, option[index + 1:])
         )
         display_letters.append(found_letter.upper())
 
@@ -328,15 +331,16 @@ def input_options(options, require=False, prompt=None, fallback_prompt=None,
         prompt_part_lengths += [len(s) for s in options]
 
         # Wrap the query text.
-        prompt = ''
+        # Start prompt with U+279C: Heavy Round-Tipped Rightwards Arrow
+        prompt = colorize('action', '\u279C ')
         line_length = 0
         for i, (part, length) in enumerate(zip(prompt_parts,
                                                prompt_part_lengths)):
             # Add punctuation.
             if i == len(prompt_parts) - 1:
-                part += '?'
+                part += colorize('action_description', '?')
             else:
-                part += ','
+                part += colorize('action_description', ',')
             length += 1
 
             # Choose either the current line or the beginning of the next.
@@ -395,8 +399,15 @@ def input_yn(prompt, require=False):
     """Prompts the user for a "yes" or "no" response. The default is
     "yes" unless `require` is `True`, in which case there is no default.
     """
+    # Start prompt with U+279C: Heavy Round-Tipped Rightwards Arrow
+    yesno = colorize('action', '\u279C ') + \
+            colorize('action_description', 'Enter Y or N:')
     sel = input_options(
+<<<<<<< HEAD
         ('y', 'n'), require, prompt, u'Enter Y or N:'
+=======
+        ('y', 'n'), require, prompt, yesno
+>>>>>>> 6bb68983... UI: Colorize prompt
     )
     return sel == u'y'
 
