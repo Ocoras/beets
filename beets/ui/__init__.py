@@ -403,11 +403,7 @@ def input_yn(prompt, require=False):
     yesno = colorize('action', '\u279C ') + \
             colorize('action_description', 'Enter Y or N:')
     sel = input_options(
-<<<<<<< HEAD
-        ('y', 'n'), require, prompt, u'Enter Y or N:'
-=======
         ('y', 'n'), require, prompt, yesno
->>>>>>> 6bb68983... UI: Colorize prompt
     )
     return sel == u'y'
 
