@@ -38,7 +38,8 @@ from beets import plugins
 from beets import util
 from beets.util.functemplate import template
 from beets import config
-from beets.util import as_string
+from beets.util import confit
+from beets.util.confit import ConfigTypeError
 from beets.autotag import mb
 from beets.dbcore import query as db_query
 from beets.dbcore import db
@@ -497,30 +498,28 @@ def human_seconds_short(interval):
 # https://bitbucket.org/birkenfeld/pygments-main/src/default/pygments/console.py
 # (pygments is by Tim Hatch, Armin Ronacher, et al.)
 COLOR_ESCAPE = "\x1b["
-DARK_COLORS = {
-    "black": 0,
-    "darkred": 1,
-    "darkgreen": 2,
-    "brown": 3,
-    "darkyellow": 3,
-    "darkblue": 4,
-    "purple": 5,
-    "darkmagenta": 5,
-    "teal": 6,
-    "darkcyan": 6,
-    "lightgray": 7
-}
-LIGHT_COLORS = {
-    "darkgray": 0,
-    "red": 1,
-    "green": 2,
-    "yellow": 3,
-    "blue": 4,
-    "fuchsia": 5,
-    "magenta": 5,
-    "turquoise": 6,
-    "cyan": 6,
-    "white": 7
+LEGACY_COLORS = {
+    "black":       ['black'],
+    "darkred":     ['red'],
+    "darkgreen":   ['green'],
+    "brown":       ['yellow'],
+    "darkyellow":  ['yellow'],
+    "darkblue":    ['blue'],
+    "purple":      ['magenta'],
+    "darkmagenta": ['magenta'],
+    "teal":        ['cyan'],
+    "darkcyan":    ['cyan'],
+    "lightgray":   ['white'],
+    "darkgray":    ['bold', 'black'],
+    "red":         ['bold', 'red'],
+    "green":       ['bold', 'green'],
+    "yellow":      ['bold', 'yellow'],
+    "blue":        ['bold', 'blue'],
+    "fuchsia":     ['bold', 'magenta'],
+    "magenta":     ['bold', 'magenta'],
+    "turquoise":   ['bold', 'cyan'],
+    "cyan":        ['bold', 'cyan'],
+    "white":       ['bold', 'white']
 }
 # All ANSI Colors.
 ANSI_CODES = {
@@ -572,24 +571,17 @@ COLORS = None
 
 def _colorize(color, text):
     """Returns a string that prints the given text in the given color
-    in a terminal that is ANSI color-aware. The color must be something
-    in DARK_COLORS or LIGHT_COLORS.
+    in a terminal that is ANSI color-aware. The color must be a list of strings
+    out of ANSI_CODES.
     """
-    if not isinstance(color, basestring):
-        # Non-strings are lists with advanced color definitions
-        escape = ""
-        for color_def in color:
-
-            color_def = "{0}".format(color_def) # TODO what the fuck
-
-            if color_def in ANSI_CODES.keys():
-                escape = escape + COLOR_ESCAPE + "%im" % ANSI_CODES[color_def]
-            #elif color_def in DARK_COLORS:
-            #    escape = COLOR_ESCAPE + "%im" % (DARK_COLORS[color_def] + 30)
-            #elif color_def in LIGHT_COLORS:
-            #    escape = COLOR_ESCAPE + "%i;01m" % (LIGHT_COLORS[color_def] + 30)
-    else:
-        raise ValueError(u'no such color %s', color)
+    # Construct escape sequence to be put before the text by iterating
+    # over all "ANSI codes" in `color`.
+    escape = ""
+    for code in color:
+        if code in ANSI_CODES.keys():
+            escape = escape + COLOR_ESCAPE + "%im" % ANSI_CODES[code]
+        else:
+            raise ValueError('no such ANSI code %s', code)
     return escape + text + RESET_COLOR
 
 
@@ -600,10 +592,27 @@ def colorize(color_name, text):
     if config['ui']['color']:
         global COLORS
         if not COLORS:
-            # TODO uncomment and repair
-            #COLORS = dict((name, config['ui']['colors'][name].get(unicode))
-            COLORS = dict((name, config['ui']['colors'][name])
-                          for name in COLOR_NAMES)
+            # Read all color configurations and set global variable COLORS.
+            COLORS = dict()
+            for name in COLOR_NAMES:
+                # Convert legacy color definitions (strings) into the new
+                # list-based color definitions. Do this by trying to read the
+                # color definition from the configuration as unicode - if this
+                # is successful, the color definition is a legacy definition
+                # and has to be converted.
+                try:
+                    color_def = config['ui']['colors'][name].get(unicode)
+                except ConfigTypeError:
+                    # Normal color definition (type: list of unicode).
+                    color_def = config['ui']['colors'][name].get(list)
+                else:
+                    # Legacy color definition (type: unicode). Convert.
+                    if color_def in LEGACY_COLORS:
+                        color_def = LEGACY_COLORS[color_def]
+                    else:
+                        raise ValueError('no such color %s', color)
+
+                COLORS[name] = color_def
         # In case a 3rd party plugin is still passing the actual color ('red')
         # instead of the abstract color name ('text_error')
         color = COLORS.get(color_name)
@@ -783,9 +792,9 @@ def split_into_lines(string, raw_string, first_width, middle_width, last_width):
         else:
             pot_substr_raw = ' '.join([next_substr_raw, words_raw[i]])
             pot_substr     = ' '.join([next_substr,     words[i]])
-        
+
         #print_('pot_substr_raw: {}'.format(pot_substr_raw))
-        
+
         # Find out if pot(ential)_substr fits into next substring
         fits_first = \
             (len(result['raw']) == 0 and len(pot_substr_raw) <= first_width)
