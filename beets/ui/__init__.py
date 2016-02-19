@@ -796,7 +796,7 @@ def term_width():
     return width
 
 
-def split_into_lines(string, raw_string, first_width, middle_width, last_width):
+def split_into_lines(string, raw_string, width_tuple):
     """Splits string into substrings at whitespace. The first substring has a
     length not longer than first_width, the last substring has a length not
     longer than last_width, and all other substrings have a length not longer
@@ -805,6 +805,8 @@ def split_into_lines(string, raw_string, first_width, middle_width, last_width):
     string contains ANSI codes at word borders. Use raw_string to find
     substrings, but return the words of string.
     """
+    first_width, middle_width, last_width = width_tuple
+
     words_raw = raw_string.split()
     words     = string.split()
     assert len(words_raw) == len(words)
