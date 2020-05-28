@@ -613,7 +613,7 @@ class FfmpegBackend(Backend):
             return float(value)
         except ValueError:
             raise ReplayGainError(
-                u"ffmpeg output: expected float value, found {1}"
+                u"ffmpeg output: expected float value, found {0}"
                 .format(value)
                 )
 
@@ -1326,10 +1326,10 @@ class ReplayGainPlugin(BeetsPlugin):
 
         if (any([self.should_use_r128(item) for item in album.items()]) and not
                 all(([self.should_use_r128(item) for item in album.items()]))):
-            raise ReplayGainError(
-                u"Mix of ReplayGain and EBU R128 detected"
-                u" for some tracks in album {0}".format(album)
-            )
+            self._log.error(
+                u"Cannot calculate gain for album {0} (incompatible formats)",
+                album)
+            return
 
         tag_vals = self.tag_specific_values(album.items())
         store_track_gain, store_album_gain, target_level, peak = tag_vals
