@@ -5,6 +5,7 @@ Changelog
 ----------------------
 
 New features:
+
 * A new :doc:`/plugins/tweet` adds the ability to tweet the output of an album query.
 * :doc:`/plugins/lastgenre`: Added more heavy metal genres: https://en.wikipedia.org/wiki/Heavy_metal_genres to genres.txt and genres-tree.yaml
 * :doc:`/plugins/subsonicplaylist`: import playlist from a subsonic server.
