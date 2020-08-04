@@ -127,6 +127,8 @@ setup(
             "pyxdg",
             "responses>=0.3.0",
             "requests_oauthlib",
+            "twitter",
+            "Pillow",
         ]
         + (
             # Tests for the thumbnails plugin need pathlib on Python 2 too.
