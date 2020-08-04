@@ -5,15 +5,15 @@ Changelog
 ----------------------
 
 New features:
-
+* A new :doc:`/plugins/tweet` adds the ability to tweet the output of an album query.
 * :doc:`/plugins/lastgenre`: Added more heavy metal genres: https://en.wikipedia.org/wiki/Heavy_metal_genres to genres.txt and genres-tree.yaml
 * :doc:`/plugins/subsonicplaylist`: import playlist from a subsonic server.
 * A new :ref:`extra_tags` configuration option allows more tagged metadata
   to be included in MusicBrainz queries.
 * A new :doc:`/plugins/fish` adds `Fish shell`_ tab autocompletion to beets
-* :doc:`plugins/fetchart` and :doc:`plugins/embedart`: Added a new ``quality``
-  option that controls the quality of the image output when the image is
-  resized.
+* :doc:`plugins/fetchart` and :doc:`plugins/embedart`: Added new ``quality`` and
+  ``max_filesize`` options that control the quality & filesize of the output when an
+  image is resized.
 * :doc:`plugins/keyfinder`: Added support for `keyfinder-cli`_
   Thanks to :user:`BrainDamage`.
 * :doc:`plugins/fetchart`: Added a new ``high_resolution`` config option to
@@ -23,7 +23,7 @@ New features:
 * :doc:`plugins/discogs` now adds two extra fields: `discogs_labelid` and
   `discogs_artistid`
   :bug: `3413`
-* :doc:`/plugins/export`: Added new ``-f`` (``--format``) flag; 
+* :doc:`/plugins/export`: Added new ``-f`` (``--format``) flag;
   which allows for the ability to export in json, csv and xml.
   Thanks to :user:`austinmm`.
   :bug:`3402`
@@ -118,7 +118,7 @@ New features:
 * :doc:`/plugins/fetchart`: Album art can now be fetched from `last.fm`_.
   :bug:`3530`
 * The classes ``AlbumInfo`` and ``TrackInfo`` now have flexible attributes,
-  allowing to solve :bug:`1547`. 
+  allowing to solve :bug:`1547`.
   Thanks to :user:`dosoe`.
 * :doc:`/plugins/web`: The query API now interprets backslashes as path
   separators to support path queries.
