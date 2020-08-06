@@ -380,22 +380,22 @@ def show_change(cur_artist, cur_album, match):
             def make_track_lengths(item, track_info):
                 """
                 """
+                cur_length_templ = u'({})'
+                new_length_templ = u'({})'
                 if item.length and track_info.length and \
                         abs(item.length - track_info.length) > \
                         config['ui']['length_diff_thresh'].as_number():
-                    cur_length_templ = u'({})'
-                    new_length_templ = u'({})'
                     cur_length_color = 'text_highlight'
                     new_length_color = 'text_highlight'
                 else:
-                    cur_length_templ = u'({})'
-                    new_length_templ = u'({})'
                     cur_length_color = 'text_highlight_minor'
                     new_length_color = 'text_highlight_minor'
-                cur_length0 = ui.human_seconds_short(item.length)
-                new_length0 = ui.human_seconds_short(track_info.length)
-                cur_length = cur_length_templ.format(cur_length0)
-                new_length = new_length_templ.format(new_length0)
+
+                # Handle nonetype lengths by setting to 0
+                cur_length0 = item.length if item.length else 0
+                new_length0 = track_info.length if track_info.length else 0
+                cur_length = cur_length_templ.format(ui.human_seconds_short(cur_length0))
+                new_length = new_length_templ.format(ui.human_seconds_short(new_length0))
                 lhs_length = ui.colorize(cur_length_color, cur_length)
                 rhs_length = ui.colorize(new_length_color, new_length)
                 return lhs_length, rhs_length
@@ -449,7 +449,7 @@ def show_change(cur_artist, cur_album, match):
                 info['changed'] = True
                 info['prefix'] = ui.colorize('changed', '\u2260 ')
                 return (info, lhs, rhs)
-            elif config['import']['detail']:
+            else:
                 # Prefix unchanged tracks with *
                 info['changed'] = False
                 info['prefix'] = '* '
@@ -494,9 +494,9 @@ def show_change(cur_artist, cur_album, match):
                 if mediums > 1:
                     return u'{0}-{1}'.format(medium, medium_index)
                 else:
-                    return unicode(medium_index)
+                    return util.text_string(medium_index)
             else:
-                return unicode(index)
+                return util.text_string(index)
 
         def format_track(info, lhs_width, rhs_width, col_width_l, col_width_r, lhs, rhs):
             """docstring for format_track"""
@@ -706,9 +706,10 @@ def show_change(cur_artist, cur_album, match):
         detail_indent = get_match_details_indentation()
 
         # Tracks.
-        pairs = match.mapping.items()
-        pairs.sort(key=lambda (_, track_info): track_info.index)
-
+        # match is an AlbumMatch named tuple, mapping is a dict
+        # Sort the pairs by the track_info index (at index 1 of the namedtuple)
+        pairs = list(match.mapping.items())
+        pairs.sort(key=lambda item_and_track_info: item_and_track_info[1].index)
         ### -----------------------------------------------------------------
         ### Build lines array
         ### -----------------------------------------------------------------
@@ -734,15 +735,17 @@ def show_change(cur_artist, cur_album, match):
                 lines.append((info, lhs, rhs))
                 medium, disctitle = track_info.medium, track_info.disctitle
 
-            # Construct the line tuple for the track.
-            info, lhs, rhs = make_line(item, track_info)
-            lines.append((info, lhs, rhs))
 
-            # Update lhs and rhs maximum line widths.
-            if max_width_l < lhs['width']:
-                max_width_l = lhs['width']
-            if max_width_r < rhs['width']:
-                max_width_r = rhs['width']
+            if config['import']['detail']:
+                # Construct the line tuple for the track.
+                info, lhs, rhs = make_line(item, track_info)
+                lines.append((info, lhs, rhs))
+
+                # Update lhs and rhs maximum line widths.
+                if max_width_l < lhs['width']:
+                    max_width_l = lhs['width']
+                if max_width_r < rhs['width']:
+                    max_width_r = rhs['width']
 
         ### -----------------------------------------------------------------
         ### Print lines
@@ -778,7 +781,7 @@ def show_change(cur_artist, cur_album, match):
                 line += ' (%s)' % ui.human_seconds_short(track_info.length)
             print_(ui.colorize('text_warning', line))
         if match.extra_items:
-            print_('Unmatched tracks ({0}):'.format(len(match.extra_items)))
+            print_(u'Unmatched tracks ({0}):'.format(len(match.extra_items)))
         for item in match.extra_items:
             line = ' ! %s (#%s)' % (item.title, format_index(item))
             if item.length:

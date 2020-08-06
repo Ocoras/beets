@@ -38,8 +38,7 @@ from beets import plugins
 from beets import util
 from beets.util.functemplate import template
 from beets import config
-from beets.util import confit
-from beets.util.confit import ConfigTypeError
+from beets.util import as_string
 from beets.autotag import mb
 from beets.dbcore import query as db_query
 from beets.dbcore import db
@@ -602,7 +601,7 @@ def colorize(color_name, text):
                 # and has to be converted.
                 try:
                     color_def = config['ui']['colors'][name].get(unicode)
-                except ConfigTypeError:
+                except (confuse.ConfigTypeError, NameError):
                     # Normal color definition (type: list of unicode).
                     color_def = config['ui']['colors'][name].get(list)
                 else:
@@ -622,19 +621,6 @@ def colorize(color_name, text):
         return _colorize(color, text)
     else:
         return text
-
-    global COLORS
-    if not COLORS:
-        COLORS = dict((name,
-                       config['ui']['colors'][name].as_str())
-                      for name in COLOR_NAMES)
-    # In case a 3rd party plugin is still passing the actual color ('red')
-    # instead of the abstract color name ('text_error')
-    color = COLORS.get(color_name)
-    if not color:
-        log.debug(u'Invalid color_name: {0}', color_name)
-        color = color_name
-    return _colorize(color, text)
 
 
 def uncolorize(colored_text):
@@ -675,7 +661,7 @@ def _colordiff(a, b):
     highlight_removed = 'text_diff_removed'
     minor_highlight = 'text_highlight_minor'
 
-    if not isinstance(a, basestring) or not isinstance(b, basestring):
+    if not isinstance(a, six.string_types) or not isinstance(b, six.string_types):
         # Non-strings: use ordinary equality.
         a = six.text_type(a)
         b = six.text_type(b)
