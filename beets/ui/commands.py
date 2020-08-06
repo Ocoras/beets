@@ -104,13 +104,13 @@ def fields_func(lib, opts, args):
 
     with lib.transaction() as tx:
         # The SQL uses the DISTINCT to get unique values from the query
-        unique_fields = 'SELECT DISTINCT key FROM (%s)'
+        unique_fields = 'SELECT DISTINCT key FROM ({})'
 
         print_(u"Item flexible attributes:")
-        _print_keys(tx.query(unique_fields % library.Item._flex_table))
+        _print_keys(tx.query(unique_fields.format(library.Item._flex_table)))
 
         print_(u"Album flexible attributes:")
-        _print_keys(tx.query(unique_fields % library.Album._flex_table))
+        _print_keys(tx.query(unique_fields.format(library.Album._flex_table)))
 
 fields_cmd = ui.Subcommand(
     'fields',
@@ -197,7 +197,7 @@ def dist_string(dist):
     """Formats a distance (a float) as a colorized similarity percentage
     string.
     """
-    string = '%.1f%%' % ((1 - dist) * 100)
+    string = u'{:.1f}'.format(((1 - dist) * 100))
     return dist_colorize(string, dist)
 
 
@@ -215,7 +215,7 @@ def penalty_string(distance, limit=None):
         if limit and len(penalties) > limit:
             penalties = penalties[:limit] + ['...']
         # Prefix penalty string with U+2260: Not Equal To
-        penalty_string = u'\u2260 %s' % ', '.join(penalties)
+        penalty_string = u'\u2260 {}'.format(u', '.join(penalties))
         return ui.colorize('changed', penalty_string)
 
 
@@ -256,7 +256,7 @@ class ChangeRepresentation(object):
         print_(u'')
 
         # 'Match' line and similarity.
-        print_(self.indent_header + u'Match (%s):' % dist_string(self.match.distance))
+        print_(self.indent_header + u'Match ({}):'.format(dist_string(self.match.distance)))
 
         # Artist name and album title.
         artist_album_str = u'{0.artist} - {0.album}'.format(self.match.info)
@@ -274,7 +274,7 @@ class ChangeRepresentation(object):
 
         # Data URL.
         if self.match.info.data_url:
-            url = ui.colorize('text_highlight_minor', '%s' % self.match.info.data_url)
+            url = ui.colorize('text_highlight_minor', u'{}'.format(self.match.info.data_url))
             print_(self.indent_header + url)
 
     def show_match_details(self):
@@ -327,12 +327,12 @@ def show_change(cur_artist, cur_album, match):
             media = match.info.media or 'Media'
             # Build output string.
             if match.info.mediums > 1 and track_info.disctitle:
-                out = '* %s %s: %s' % (media, track_info.medium,
-                                     track_info.disctitle)
+                out = '* {} {}: {}'.format((media, track_info.medium,
+                                     track_info.disctitle))
             elif track_info.disctitle:
-                out = '* %s: %s' % (media, track_info.disctitle)
+                out = '* {}: {}'.format((media, track_info.disctitle))
             else:
-                out = '* %s %s' % (media, track_info.medium)
+                out = '* {} {}'.format((media, track_info.medium))
             return out
 
         def make_line(item, track_info):
@@ -700,7 +700,7 @@ def show_change(cur_artist, cur_album, match):
                         lhs['track'], lhs['title'], pad_l, lhs['length'])
                     rhs_str = template.format(
                         rhs['track'], rhs['title'], pad_r, rhs['length'])
-                    print_(l_pre + u'%s -> %s' % (lhs_str, rhs_str))
+                    print_(l_pre + u'{} -> {}'.format(lhs_str, rhs_str))
 
         # Read match detail indentation width from config.
         detail_indent = get_match_details_indentation()
@@ -776,16 +776,16 @@ def show_change(cur_artist, cur_album, match):
                    len(match.extra_tracks) / len(match.info.tracks)
                    ))
         for track_info in match.extra_tracks:
-            line = ' ! %s (#%s)' % (track_info.title, format_index(track_info))
+            line = u' ! {} (#{})'.format(track_info.title, format_index(track_info))
             if track_info.length:
-                line += ' (%s)' % ui.human_seconds_short(track_info.length)
+                line += u' ({})'.format(ui.human_seconds_short(track_info.length))
             print_(ui.colorize('text_warning', line))
         if match.extra_items:
             print_(u'Unmatched tracks ({0}):'.format(len(match.extra_items)))
         for item in match.extra_items:
-            line = ' ! %s (#%s)' % (item.title, format_index(item))
+            line = u' ! {} (#{})'.format(item.title, format_index(item))
             if item.length:
-                line += ' (%s)' % ui.human_seconds_short(item.length)
+                line += u' ({})'.format(ui.human_seconds_short(item.length))
             print_(ui.colorize('text_warning', line))
 
     change = ChangeRepresentation(cur_artist=cur_artist, cur_album=cur_album, match=match)
@@ -812,21 +812,21 @@ def show_item_change(item, match):
         cur_title, new_title = ui.colordiff(cur_title, new_title)
 
         print_(u"Correcting track tags from:")
-        print_(u"    %s - %s" % (cur_artist, cur_title))
+        print_(u"    {} - {}".format(cur_artist, cur_title))
         print_(u"To:")
-        print_(u"    %s - %s" % (new_artist, new_title))
+        print_(u"    {} - {}".format(new_artist, new_title))
 
     else:
-        print_(u"Tagging track: %s - %s" % (cur_artist, cur_title))
+        print_(u"Tagging track: {} - {}".format(cur_artist, cur_title))
 
     # Data URL.
     if match.info.data_url:
-        print_(u'URL:\n    %s' % match.info.data_url)
+        print_(u'URL:\n    {}'.format(match.info.data_url))
 
     # Info line.
     info = []
     # Similarity.
-    info.append(u'(Similarity: %s)' % dist_string(match.distance))
+    info.append(u'(Similarity: {})'.format(dist_string(match.distance)))
     # Penalties.
     penalties = penalty_string(match.distance)
     if penalties:
@@ -834,7 +834,7 @@ def show_item_change(item, match):
     # Disambiguation.
     disambig = disambig_string(match.info)
     if disambig:
-        info.append('(%s)' % disambig)
+        info.append('({})'.format(disambig))
     print_(' '.join(info))
 
 
@@ -1645,12 +1645,12 @@ def remove_items(lib, query, album, delete, force):
         print_()
         if delete:
             fmt = u'$path - $title'
-            prompt = u'Really DELETE %i file%s (y/n)?' % \
-                     (len(items), 's' if len(items) > 1 else '')
+            prompt = u'Really DELETE {} file{} (y/n)?'.format(
+                     len(items), u's' if len(items) > 1 else u'')
         else:
             fmt = u''
-            prompt = u'Really remove %i item%s from the library (y/n)?' % \
-                     (len(items), 's' if len(items) > 1 else '')
+            prompt = u'Really remove {} item{} from the library (y/n)?'.format(
+                     len(items), u's' if len(items) > 1 else u'')
 
         # Show all the items.
         for item in items:
@@ -1753,7 +1753,7 @@ default_commands.append(stats_cmd)
 # version: Show current beets version.
 
 def show_version(lib, opts, args):
-    print_(u'beets version %s' % beets.__version__)
+    print_(u'beets version {}'.format(beets.__version__))
     print_(u'Python version {}'.format(python_version()))
     # Show plugins.
     names = sorted(p.name for p in plugins.find_plugins())
@@ -1815,7 +1815,7 @@ def modify_items(lib, mods, dels, query, write, move, album, confirm):
             extra = u''
 
         changed = ui.input_select_objects(
-            u'Really modify%s' % extra, changed,
+            u'Really modify{}'.format(extra), changed,
             lambda o: print_and_modify(o, mods, dels)
         )
 
@@ -1938,7 +1938,7 @@ def move_items(lib, dest, query, copy, album, pretend, confirm=False,
     else:
         if confirm:
             objs = ui.input_select_objects(
-                u'Really %s' % act, objs,
+                u'Really {}'.format(act), objs,
                 lambda o: show_path_changes(
                     [(o.path, o.destination(basedir=dest))]))
 
@@ -1962,7 +1962,7 @@ def move_func(lib, opts, args):
     if dest is not None:
         dest = normpath(dest)
         if not os.path.isdir(dest):
-            raise ui.UserError(u'no such directory: %s' % dest)
+            raise ui.UserError(u'no such directory: {}'.format(dest))
 
     move_items(lib, dest, decargs(args), opts.copy, opts.album, opts.pretend,
                opts.timid, opts.export)
@@ -2187,29 +2187,29 @@ def completion_script(commands):
     yield u"_beet() {\n"
 
     # Command names
-    yield u"  local commands='%s'\n" % ' '.join(command_names)
+    yield u"  local commands='{}'\n".format(u' '.join(command_names))
     yield u"\n"
 
     # Command aliases
-    yield u"  local aliases='%s'\n" % ' '.join(aliases.keys())
+    yield u"  local aliases='{}'\n".format(u' '.join(aliases.keys()))
     for alias, cmd in aliases.items():
-        yield u"  local alias__%s=%s\n" % (alias.replace('-', '_'), cmd)
+        yield u"  local alias__{}={}\n".format(alias.replace('-', '_'), cmd)
     yield u'\n'
 
     # Fields
-    yield u"  fields='%s'\n" % ' '.join(
+    yield u"  fields='{}'\n".format(' '.join(
         set(
             list(library.Item._fields.keys()) +
             list(library.Album._fields.keys())
         )
-    )
+    ))
 
     # Command options
     for cmd, opts in options.items():
         for option_type, option_list in opts.items():
             if option_list:
                 option_list = u' '.join(option_list)
-                yield u"  local %s__%s='%s'\n" % (
+                yield u"  local {}__{}='{}'\n".format(
                     option_type, cmd.replace('-', '_'), option_list)
 
     yield u'  _beet_dispatch\n'
