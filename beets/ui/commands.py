@@ -327,12 +327,12 @@ def show_change(cur_artist, cur_album, match):
             media = match.info.media or 'Media'
             # Build output string.
             if match.info.mediums > 1 and track_info.disctitle:
-                out = '* {} {}: {}'.format((media, track_info.medium,
-                                     track_info.disctitle))
+                out = '* {} {}: {}'.format(media, track_info.medium,
+                                           track_info.disctitle)
             elif track_info.disctitle:
-                out = '* {}: {}'.format((media, track_info.disctitle))
+                out = '* {}: {}'.format(media, track_info.disctitle)
             else:
-                out = '* {} {}'.format((media, track_info.medium))
+                out = '* {} {}'.format(media, track_info.medium)
             return out
 
         def make_line(item, track_info):
@@ -351,53 +351,45 @@ def show_change(cur_artist, cur_album, match):
                     return ui.colordiff(cur_title, new_title)
 
             def make_track_numbers(item, track_info):
-                """docstring for fname
+                """Format colored track indices.
                 """
                 cur_track = format_index(item)
                 new_track = format_index(track_info)
+                templ = u'(#{})'
+                # Choose colour based on change.
                 if cur_track != new_track:
                     if item.track in (track_info.index, track_info.medium_index):
-                        cur_track_templ = u'(#{})'
-                        new_track_templ = u'(#{})'
-                        cur_track_color = 'text_highlight_minor'
-                        new_track_color = 'text_highlight_minor'
+                        highlight_color = 'text_highlight_minor'
                     else:
-                        cur_track_templ = u'(#{})'
-                        new_track_templ = u'(#{})'
-                        cur_track_color = 'text_highlight'
-                        new_track_color = 'text_highlight'
+                        highlight_color = 'text_highlight'
                 else:
-                    cur_track_templ = u''
-                    new_track_templ = u''
-                    cur_track_color = 'text_faint'
-                    new_track_color = 'text_faint'
-                cur_track = cur_track_templ.format(cur_track)
-                new_track = new_track_templ.format(new_track)
-                lhs_track = ui.colorize(cur_track_color, cur_track)
-                rhs_track = ui.colorize(new_track_color, new_track)
+                    highlight_color = 'text_faint'
+
+                cur_track = templ.format(cur_track)
+                new_track = templ.format(new_track)
+                lhs_track = ui.colorize(highlight_color, cur_track)
+                rhs_track = ui.colorize(highlight_color, new_track)
                 return lhs_track, rhs_track
 
             def make_track_lengths(item, track_info):
+                """Format colored track lengths.
                 """
-                """
-                cur_length_templ = u'({})'
-                new_length_templ = u'({})'
+                templ = u'({})'
                 if item.length and track_info.length and \
                         abs(item.length - track_info.length) > \
                         config['ui']['length_diff_thresh'].as_number():
-                    cur_length_color = 'text_highlight'
-                    new_length_color = 'text_highlight'
+                    highlight_color = 'text_highlight'
+
                 else:
-                    cur_length_color = 'text_highlight_minor'
-                    new_length_color = 'text_highlight_minor'
+                    highlight_color = 'text_highlight_minor'
 
                 # Handle nonetype lengths by setting to 0
                 cur_length0 = item.length if item.length else 0
                 new_length0 = track_info.length if track_info.length else 0
-                cur_length = cur_length_templ.format(ui.human_seconds_short(cur_length0))
-                new_length = new_length_templ.format(ui.human_seconds_short(new_length0))
-                lhs_length = ui.colorize(cur_length_color, cur_length)
-                rhs_length = ui.colorize(new_length_color, new_length)
+                cur_length = templ.format(ui.human_seconds_short(cur_length0))
+                new_length = templ.format(ui.human_seconds_short(new_length0))
+                lhs_length = ui.colorize(highlight_color, cur_length)
+                rhs_length = ui.colorize(highlight_color, new_length)
                 return lhs_length, rhs_length
 
             # Track titles.
@@ -406,8 +398,6 @@ def show_change(cur_artist, cur_album, match):
             lhs_track, rhs_track = make_track_numbers(item, track_info)
             # Length change.
             lhs_length, rhs_length = make_track_lengths(item, track_info)
-            # Penalties.
-            penalties = penalty_string(match.distance.tracks[track_info])
 
             # Construct comparison strings to check for differences and update
             # line length.
