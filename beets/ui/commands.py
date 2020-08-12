@@ -177,7 +177,7 @@ def disambig_string(info):
             disambig.append(info.albumdisambig)
 
     if disambig:
-        return ui.colorize('text_highlight_minor', u' | '.join(disambig))
+        return ui.colorize('text_faint', u' | '.join(disambig))
 
 
 def dist_colorize(string, dist):
@@ -974,6 +974,8 @@ def choose_candidate(candidates, singleton, rec, cur_artist=None,
                 )
                 if i == 0:
                     metadata = dist_colorize(metadata, match.distance)
+                else:
+                    metadata = ui.colorize("text_highlight_minor", metadata)
                 line1 = [
                     index,
                     distance,
