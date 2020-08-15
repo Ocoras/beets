@@ -685,7 +685,7 @@ def show_change(cur_artist, cur_album, match):
                     l_pre = info['indent'] + info['prefix']
                     pad_l = ' ' * (col_width_l - lhs['width'])
                     pad_r = ' ' * (col_width_r - rhs['width'])
-                    template = "{0} {1} {2}{3}"
+                    template = u"{0} {1} {2}{3}"
                     lhs_str = template.format(
                         lhs['track'], lhs['title'], pad_l, lhs['length'])
                     rhs_str = template.format(

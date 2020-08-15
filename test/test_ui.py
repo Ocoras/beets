@@ -1081,7 +1081,7 @@ class ShowChangeTest(_common.TestCase):
     def test_null_change(self):
         msg = self._show_change()
         self.assertTrue('match (90.0%)' in msg)
-        self.assertTrue('≠ album, artist' in msg)
+        self.assertTrue('album, artist' in msg)
 
     def test_album_data_change(self):
         msg = self._show_change(cur_artist='another artist',
