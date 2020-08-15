@@ -1073,19 +1073,22 @@ class ShowChangeTest(_common.TestCase):
             autotag.AlbumMatch(album_dist, info, mapping, set(), set()),
         )
         # FIXME decoding shouldn't be done here
-        return util.text_string(self.io.getoutput().lower())
+        out = util.text_string(self.io.getoutput().lower())
+        _common.log.info(out)
+        return out
 
     def test_null_change(self):
         msg = self._show_change()
-        self.assertTrue('similarity: 90' in msg)
-        self.assertTrue('tagging:' in msg)
+        self.assertTrue('match (90.0%)' in msg)
 
     def test_album_data_change(self):
         msg = self._show_change(cur_artist='another artist',
                                 cur_album='another album')
-        self.assertTrue('correcting tags from:' in msg)
+        self.assertTrue('another artist -> the artist' in msg)
+        self.assertTrue('another album -> the album' in msg)
 
     def test_item_data_change(self):
+        _common.log.info("item data")
         self.items[0].title = u'different'
         msg = self._show_change()
         self.assertTrue('different -> the title' in msg)
@@ -1098,7 +1101,7 @@ class ShowChangeTest(_common.TestCase):
     def test_album_data_change_with_unicode(self):
         msg = self._show_change(cur_artist=u'caf\xe9',
                                 cur_album=u'another album')
-        self.assertTrue(u'correcting tags from:' in msg)
+        self.assertTrue(u'caf\xe9 -> the artist' in msg)
 
     def test_item_data_change_title_missing(self):
         self.items[0].title = u''

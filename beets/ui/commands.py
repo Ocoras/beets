@@ -197,7 +197,7 @@ def dist_string(dist):
     """Formats a distance (a float) as a colorized similarity percentage
     string.
     """
-    string = u'{:.1f}'.format(((1 - dist) * 100))
+    string = u'{:.1f}%'.format(((1 - dist) * 100))
     return dist_colorize(string, dist)
 
 
@@ -966,7 +966,7 @@ def choose_candidate(candidates, singleton, rec, cur_artist=None,
                 # Index, metadata, and distance.
                 index0 = u'{0}.'.format(i + 1)
                 index = dist_colorize(index0, match.distance)
-                dist = '(%.1f%%)' % ((1 - match.distance) * 100)
+                dist = u'({:.1f}%)'.format((1 - match.distance) * 100)
                 distance = dist_colorize(dist, match.distance)
                 metadata = u'{0} - {1}'.format(
                     match.info.artist,
