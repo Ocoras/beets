@@ -314,7 +314,6 @@ class ChangeRepresentation(object):
             else:
                 print_(self.indent_detail + '*', 'Title:', title_r)
 
-
     def make_medium_info_line(self, track_info):
         """Construct a line with the current medium's info."""
         media = self.match.info.media or 'Media'
@@ -355,8 +354,10 @@ class ChangeRepresentation(object):
         cur_track = self.format_index(item)
         new_track = self.format_index(track_info)
         templ = u'(#{})'
+        changed = False
         # Choose color based on change.
         if cur_track != new_track:
+            changed = True
             if item.track in (track_info.index, track_info.medium_index):
                 highlight_color = 'text_highlight_minor'
             else:
@@ -368,7 +369,7 @@ class ChangeRepresentation(object):
         new_track = templ.format(new_track)
         lhs_track = ui.colorize(highlight_color, cur_track)
         rhs_track = ui.colorize(highlight_color, new_track)
-        return lhs_track, rhs_track
+        return lhs_track, rhs_track, changed
 
     @staticmethod
     def make_track_titles(item, track_info):
@@ -378,11 +379,11 @@ class ChangeRepresentation(object):
         if not item.title.strip():
             # If there's no title, we use the filename. Don't colordiff.
             cur_title = displayable_path(os.path.basename(item.path))
-            return cur_title, new_title
+            return cur_title, new_title, True
         else:
             # If there is a title, highlight differences.
             cur_title = item.title.strip()
-            return ui.colordiff(cur_title, new_title)
+            return ui.colordiff(cur_title, new_title), cur_title == new_title
     
     @staticmethod
     def make_track_lengths(item, track_info):
@@ -404,25 +405,23 @@ class ChangeRepresentation(object):
         new_length = templ.format(ui.human_seconds_short(new_length0))
         lhs_length = ui.colorize(highlight_color, cur_length)
         rhs_length = ui.colorize(highlight_color, new_length)
-        return lhs_length, rhs_length
+        return lhs_length, rhs_length, cur_length0 == new_length0
 
-    
     def make_line(self, item, track_info):
         """Extract changes from item -> new TrackInfo object, and colorize
         appropriately. Returns (info, lhs, rhs) for column printing.
         """
         # Track titles.
-        lhs_title, rhs_title = self.make_track_titles(item, track_info)
+        lhs_title, rhs_title, diff_title = self.make_track_titles(item, track_info)
         # Track number change.
-        lhs_track, rhs_track = self.make_track_numbers(item, track_info)
+        lhs_track, rhs_track, diff_track = self.make_track_numbers(item, track_info)
         # Length change.
-        lhs_length, rhs_length = self.make_track_lengths(item, track_info)
+        lhs_length, rhs_length, diff_length = self.make_track_lengths(item, track_info)
+
+        changed = diff_title or diff_track or diff_length
+
         # Construct comparison strings to check for differences and update
         # line length.
-        lhs_comp = ui.uncolorize(' '.join([lhs_track, lhs_title, lhs_length]))
-        rhs_comp = ui.uncolorize(' '.join([rhs_track, rhs_title, rhs_length]))
-        lhs_width = len(lhs_comp)
-        rhs_width = len(rhs_comp)
 
         # Construct indentation.
         indent_width = \
@@ -431,41 +430,36 @@ class ChangeRepresentation(object):
 
         # Construct lhs and rhs dicts.
         info = {
-            'prefix':    u'',
+            'prefix':    ui.colorize('changed', '\u2260 ') if changed else u'* ',
             'indent':    indent,
-            'changed':   False,
+            'changed':   changed,
             'penalties': penalty_string(self.match.distance.tracks[track_info]),
         }
         lhs = {
-            'title':  lhs_title,
-            'track':  lhs_track,
-            'length': lhs_length,
-            'width':  lhs_width,
-        }
-        rhs = {
-            'title':  rhs_title,
-            'track':  rhs_track,
-            'length': rhs_length,
-            'width':  rhs_width,
-        }
-        # Check whether track info will change should the user apply
-        # the match.
-        # TODO: Is there a better way to determine if a track has changed?
-        if lhs_comp != rhs_comp:
-            # Prefix changed tracks with U+2260: Not Equal To
-            info['changed'] = True
-            info['prefix'] = ui.colorize('changed', '\u2260 ')
+                'title':  lhs_title,
+                'track':  lhs_track,
+                'length': lhs_length,
+            }
+        if changed:
+            # Construct a dictionary for the "changed to" side
+            rhs = {
+                'title':  rhs_title,
+                'track':  rhs_track,
+                'length': rhs_length,
+            }
             return (info, lhs, rhs)
         else:
-            # Prefix unchanged tracks with *
-            info['changed'] = False
-            info['prefix'] = '* '
+            # Only return the left side, as nothing changed.
             return (info, lhs, {})
     
     @staticmethod
     def print_lines(lines):
         """Print a list of line tuples: (info, lhs, rhs).
         """
+        def get_width(side):
+            """Return the width of lhs or rhs in uncolorized characters."""
+            return len(ui.uncolorize(' '.join([side['track'], side['title'], side['length']])))
+
         def calc_column_width(col_width, max_width_l, max_width_r):
             """Calculate column widths for a two-column layout.
             `col_width` is the naive width for each column (the total width
@@ -488,7 +482,33 @@ class ChangeRepresentation(object):
                 col_width_r = col_width
             return col_width_l, col_width_r
 
-        # ToDo - Include format_track_as_columns and format_track in a nice way here somewhere
+        def format_track(info, lhs_width, rhs_width, col_width_l, col_width_r, lhs, rhs):
+            """Return a string formatted to fill columns of specified width."""
+            pad_l = u' ' * (col_width_l - lhs_width)
+            pad_r = u' ' * (col_width_r - rhs_width)
+            xhs_template = u'{title} {title} {padding}{length}'
+            lhs_str = xhs_template.format(
+                track   = lhs['track'],
+                title   = lhs['title'],
+                padding = pad_l,
+                length  = lhs['length']
+            )
+            rhs_str = xhs_template.format(
+                track   = rhs['track'],
+                title   = rhs['title'],
+                padding = pad_r,
+                length  = rhs['length']
+            )
+            line_template = u'{indent}{prefix}{lhs} ->\n{indent}{padding}{rhs}'
+            return line_template.format(
+                indent  = info['indent'],
+                prefix  = info['prefix'],
+                padding = ui.indent(len('* ')),
+                lhs     = lhs_str,
+                rhs     = rhs_str,
+            )
+
+        # TODO - Include format_track_as_columns in a nice way here somewhere
         def print_single_line(info, lhs, rhs, col_width_l, col_width_r):
             """Print a single line's info, lhs, rhs within the column widths defined.
             """
@@ -498,13 +518,13 @@ class ChangeRepresentation(object):
             elif not info['changed']:
                 # Print unchanged track.
                 l_pre = info['indent'] + info['prefix']
-                pad_l = ' ' * (max_width_l - lhs['width'])
+                pad_l = ' ' * (max_width_l - get_width(lhs))
                 lhs_str = "{0} {1} {2}{3}".format(
                     lhs['track'], lhs['title'], pad_l, lhs['length'])
                 print_(l_pre + lhs_str)
             else:
                 # Print changed track.
-                if (lhs['width'] > col_width_l) or (rhs['width'] > col_width_r):
+                if (get_width(lhs) > col_width_l) or (get_width(rhs) > col_width_r):
                     layout = \
                         config['ui']['import']['albumdiff']['layout'].as_choice({
                             'column': 0,
@@ -515,12 +535,12 @@ class ChangeRepresentation(object):
                         format_track_as_columns(info,lhs, rhs, col_width_l, col_width_r)
                     elif layout == 1:
                         # Wrap overlong track changes at column border.
-                        format_track(info, lhs['width'], rhs['width'],
-                                        max_width_l, max_width_r, lhs, rhs)
+                        print_(format_track(info, get_width(lhs), get_width(rhs),
+                                        max_width_l, max_width_r, lhs, rhs))
                 else:
                     l_pre = info['indent'] + info['prefix']
-                    pad_l = ' ' * (col_width_l - lhs['width'])
-                    pad_r = ' ' * (col_width_r - rhs['width'])
+                    pad_l = ' ' * (col_width_l - get_width(lhs))
+                    pad_r = ' ' * (col_width_r - get_width(rhs))
                     template = u"{0} {1} {2}{3}"
                     lhs_str = template.format(
                         lhs['track'], lhs['title'], pad_l, lhs['length'])
@@ -534,10 +554,13 @@ class ChangeRepresentation(object):
 
         col_width = (terminal_width - indent_width - joiner_width) // 2
 
-        max_width_l = max(line_tuple[1]['width'] for line_tuple in lines)
-        max_width_r = max(line_tuple[2]['width'] for line_tuple in lines)
+        max_width_l = max(get_width(line_tuple[1]) for line_tuple in lines)
+        max_width_r = max(get_width(line_tuple[2]) for line_tuple in lines)
 
         col_width_l, col_width_r = calc_column_width(col_width, max_width_l, max_width_r)
+
+        for info, lhs, rhs in lines:
+            print_single_line(info,lhs,rhs,col_width_l,col_width_r)
 
 
 class AlbumChange(ChangeRepresentation):
@@ -604,211 +627,10 @@ def show_change(cur_artist, cur_album, match):
     album's tags are changed according to `match`, which must be an AlbumMatch
     object.
     """
-    def get_match_details_indentation():
-        """Reads match detail indentation width from config.
-        """
-        match_detail_indent_width = \
-            config['ui']['import']['indentation']['match_details'].as_number()
-        return ui.indent(match_detail_indent_width)
 
     def show_match_tracks():
-        """Print out the tracks of the match, summarizing changes the match
-        suggests for them.
+        """Move these functions to CHange Representation above.
         """
-        def make_medium_info_line():
-            """Construct a line with the current medium's info."""
-            media = match.info.media or 'Media'
-            # Build output string.
-            if match.info.mediums > 1 and track_info.disctitle:
-                out = '* {} {}: {}'.format(media, track_info.medium,
-                                           track_info.disctitle)
-            elif track_info.disctitle:
-                out = '* {}: {}'.format(media, track_info.disctitle)
-            else:
-                out = '* {} {}'.format(media, track_info.medium)
-            return out
-
-        def make_line(item, track_info):
-            """docstring for make_track_line"""
-            def make_track_titles(item, track_info):
-                """docstring for fname
-                """
-                new_title = track_info.title
-                if not item.title.strip():
-                    # If there's no title, we use the filename. Don't colordiff.
-                    cur_title = displayable_path(os.path.basename(item.path))
-                    return cur_title, new_title
-                else:
-                    # If there is a title, highlight differences.
-                    cur_title = item.title.strip()
-                    return ui.colordiff(cur_title, new_title)
-
-            def make_track_numbers(item, track_info):
-                """Format colored track indices.
-                """
-                cur_track = format_index(item)
-                new_track = format_index(track_info)
-                templ = u'(#{})'
-                # Choose colour based on change.
-                if cur_track != new_track:
-                    if item.track in (track_info.index, track_info.medium_index):
-                        highlight_color = 'text_highlight_minor'
-                    else:
-                        highlight_color = 'text_highlight'
-                else:
-                    highlight_color = 'text_faint'
-
-                cur_track = templ.format(cur_track)
-                new_track = templ.format(new_track)
-                lhs_track = ui.colorize(highlight_color, cur_track)
-                rhs_track = ui.colorize(highlight_color, new_track)
-                return lhs_track, rhs_track
-
-            def make_track_lengths(item, track_info):
-                """Format colored track lengths.
-                """
-                templ = u'({})'
-                if item.length and track_info.length and \
-                        abs(item.length - track_info.length) > \
-                        config['ui']['length_diff_thresh'].as_number():
-                    highlight_color = 'text_highlight'
-
-                else:
-                    highlight_color = 'text_highlight_minor'
-
-                # Handle nonetype lengths by setting to 0
-                cur_length0 = item.length if item.length else 0
-                new_length0 = track_info.length if track_info.length else 0
-                cur_length = templ.format(ui.human_seconds_short(cur_length0))
-                new_length = templ.format(ui.human_seconds_short(new_length0))
-                lhs_length = ui.colorize(highlight_color, cur_length)
-                rhs_length = ui.colorize(highlight_color, new_length)
-                return lhs_length, rhs_length
-
-            # Track titles.
-            lhs_title, rhs_title = make_track_titles(item, track_info)
-            # Track number change.
-            lhs_track, rhs_track = make_track_numbers(item, track_info)
-            # Length change.
-            lhs_length, rhs_length = make_track_lengths(item, track_info)
-
-            # Construct comparison strings to check for differences and update
-            # line length.
-            lhs_comp = ui.uncolorize(' '.join([lhs_track, lhs_title, lhs_length]))
-            rhs_comp = ui.uncolorize(' '.join([rhs_track, rhs_title, rhs_length]))
-            lhs_width = len(lhs_comp)
-            rhs_width = len(rhs_comp)
-
-            # Construct indentation.
-            indent_width = \
-            config['ui']['import']['indentation']['match_tracklist'].as_number()
-            indent = ui.indent(indent_width)
-
-            # Construct lhs and rhs dicts.
-            info = {
-                'prefix':    u'',
-                'indent':    indent,
-                'changed':   False,
-                'penalties': penalty_string(match.distance.tracks[track_info]),
-            }
-            lhs = {
-                'title':  lhs_title,
-                'track':  lhs_track,
-                'length': lhs_length,
-                'width':  lhs_width,
-            }
-            rhs = {
-                'title':  rhs_title,
-                'track':  rhs_track,
-                'length': rhs_length,
-                'width':  rhs_width,
-            }
-
-            # Check whether track info will change should the user apply
-            # the match.
-            # TODO: Is there a better way to determine if a track has changed?
-            if lhs_comp != rhs_comp:
-                # Prefix changed tracks with U+2260: Not Equal To
-                info['changed'] = True
-                info['prefix'] = ui.colorize('changed', '\u2260 ')
-                return (info, lhs, rhs)
-            else:
-                # Prefix unchanged tracks with *
-                info['changed'] = False
-                info['prefix'] = '* '
-                return (info, lhs, {})
-
-        def calc_column_width(col_width, max_width_l, max_width_r):
-            """Calculate column widths for a two-column layout.
-            `col_width` is the naive width for each column (the total width
-                divided by 2).
-            `max_width_l` and `max_width_r` are the maximum width of the
-                content of each column.
-            Returns a 2-tuple of the left and right column width.
-            """
-            if (max_width_l <= col_width) and (max_width_r <= col_width):
-                col_width_l = max_width_l
-                col_width_r = max_width_r
-            elif ((max_width_l > col_width) or (max_width_r > col_width)) \
-                 and ((max_width_l + max_width_r) <= col_width * 2):
-                # Either left or right column larger than allowed, but the other is
-                # smaller than allowed - in total the content fits.
-                col_width_l = max_width_l
-                col_width_r = max_width_r
-            else:
-                col_width_l = col_width
-                col_width_r = col_width
-            return col_width_l, col_width_r
-
-        def format_index(track_info):
-            """Return a string representing the track index of the given
-            TrackInfo or Item object.
-            """
-            if isinstance(track_info, hooks.TrackInfo):
-                index = track_info.index
-                medium_index = track_info.medium_index
-                medium = track_info.medium
-                mediums = match.info.mediums
-            else:
-                index = medium_index = track_info.track
-                medium = track_info.disc
-                mediums = track_info.disctotal
-            if config['per_disc_numbering']:
-                if mediums > 1:
-                    return u'{0}-{1}'.format(medium, medium_index)
-                else:
-                    return util.text_string(medium_index)
-            else:
-                return util.text_string(index)
-
-        def format_track(info, lhs_width, rhs_width, col_width_l, col_width_r, lhs, rhs):
-            """docstring for format_track"""
-            # Print track.
-            pad_l = u' ' * (col_width_l - lhs_width)
-            pad_r = u' ' * (col_width_r - rhs_width)
-            xhs_template = u'{title} {title} {padding}{length}'
-            lhs_str = xhs_template.format(
-                track   = lhs['track'],
-                title   = lhs['title'],
-                padding = pad_l,
-                length  = lhs['length']
-            )
-            rhs_str = xhs_template.format(
-                track   = rhs['track'],
-                title   = rhs['title'],
-                padding = pad_r,
-                length  = rhs['length']
-            )
-            line_template = u'{indent}{prefix}{lhs} ->\n{indent}{padding}{rhs}'
-            out = line_template.format(
-                indent  = info['indent'],
-                prefix  = info['prefix'],
-                padding = ui.indent(len('* ')),
-                lhs     = lhs_str,
-                rhs     = rhs_str,
-            )
-            print_(out)
-
         def format_track_as_columns(info, col_width_l, col_width_r, lhs, rhs):
             """docstring for format_track_as_columns"""
             # TODO: Think about how to beautify calc_available_columns_per_line
@@ -945,108 +767,7 @@ def show_change(cur_artist, cur_album, match):
             # Print complete line.
             print_(out)
 
-        def print_line(info, lhs, rhs):
-            """
-            """
-            if 'disk' in info:
-                # Print disk info.
-                print_(info['disk'])
-            elif not info['changed']:
-                # Print unchanged track.
-                l_pre = info['indent'] + info['prefix']
-                pad_l = ' ' * (max_width_l - lhs['width'])
-                lhs_str = "{0} {1} {2}{3}".format(
-                    lhs['track'], lhs['title'], pad_l, lhs['length'])
-                print_(l_pre + lhs_str)
-            else:
-                # Print changed track.
-                if (lhs['width'] > col_width_l) or (rhs['width'] > col_width_r):
-                    layout = \
-                        config['ui']['import']['albumdiff']['layout'].as_choice({
-                            'column':  0,
-                            'newline': 1,
-                        })
-                    if layout == 0:
-                        # Word wrapping inside columns.
-                        format_track_as_columns(info,
-                            col_width_l, col_width_r, lhs, rhs)
-                    elif layout == 1:
-                        # Wrap overlong track changes at column border.
-                        format_track(info, lhs['width'], rhs['width'],
-                            max_width_l, max_width_r, lhs, rhs)
-                else:
-                    l_pre = info['indent'] + info['prefix']
-                    pad_l = ' ' * (col_width_l - lhs['width'])
-                    pad_r = ' ' * (col_width_r - rhs['width'])
-                    template = u"{0} {1} {2}{3}"
-                    lhs_str = template.format(
-                        lhs['track'], lhs['title'], pad_l, lhs['length'])
-                    rhs_str = template.format(
-                        rhs['track'], rhs['title'], pad_r, rhs['length'])
-                    print_(l_pre + u'{} -> {}'.format(lhs_str, rhs_str))
-
-        # Read match detail indentation width from config.
-        detail_indent = get_match_details_indentation()
-
-        # Tracks.
-        # match is an AlbumMatch named tuple, mapping is a dict
-        # Sort the pairs by the track_info index (at index 1 of the namedtuple)
-        pairs = list(match.mapping.items())
-        pairs.sort(key=lambda item_and_track_info: item_and_track_info[1].index)
-        ### -----------------------------------------------------------------
-        ### Build lines array
-        ### -----------------------------------------------------------------
-
-        # Build up LHS and RHS for track difference display. The `lines` list
-        # contains `(info, lhs, rhs)` tuples.
-        lines = []
-        medium = disctitle = None
-        max_width_l = max_width_r = 0
-
-        for item, track_info in pairs:
-            # If the track is the first on a new medium, show medium
-            # number and title.
-            if medium != track_info.medium or disctitle != track_info.disctitle:
-                out = make_medium_info_line()
-                info = {
-                    'prefix':    u'',
-                    'disk':      detail_indent + out,
-                    'penalties': None,
-                }
-                lhs = {}
-                rhs = {}
-                lines.append((info, lhs, rhs))
-                medium, disctitle = track_info.medium, track_info.disctitle
-
-
-            if config['import']['detail']:
-                # Construct the line tuple for the track.
-                info, lhs, rhs = make_line(item, track_info)
-                lines.append((info, lhs, rhs))
-
-                # Update lhs and rhs maximum line widths.
-                if max_width_l < lhs['width']:
-                    max_width_l = lhs['width']
-                if max_width_r < rhs['width']:
-                    max_width_r = rhs['width']
-
-        ### -----------------------------------------------------------------
-        ### Print lines
-        ### -----------------------------------------------------------------
-
-        terminal_width = ui.term_width()
-        joiner_width   = len(''.join(['* ', ' -> ']))
-        indent_width   = config['ui']['import']['indentation']['match_tracklist'].as_number()
-        col_width = (terminal_width - indent_width - joiner_width) // 2
-
-        if lines:
-            # Calculate width of left and right column.
-            col_width_l, col_width_r = \
-                calc_column_width(col_width, max_width_l, max_width_r)
-            # Print lines.
-            for info, lhs, rhs in lines:
-                print_line(info, lhs, rhs)
-
+    
         ### -----------------------------------------------------------------
         ### Missing and unmatched tracks
         ### -----------------------------------------------------------------
@@ -1080,7 +801,7 @@ def show_change(cur_artist, cur_album, match):
     change.show_match_details()
 
     # Print the match tracks.
-    show_match_tracks()
+    change.show_match_tracks() # incomplete - need to handle missing tracks and format_as columns
 
 
 def show_item_change(item, match):

@@ -401,7 +401,7 @@ def input_yn(prompt, require=False):
     """
     # Start prompt with U+279C: Heavy Round-Tipped Rightwards Arrow
     yesno = colorize('action', '\u279C ') + \
-            colorize('action_description', 'Enter Y or N:')
+        colorize('action_description', 'Enter Y or N:')
     sel = input_options(
         ('y', 'n'), require, prompt, yesno
     )
@@ -526,13 +526,13 @@ ANSI_CODES = {
     "normal":       0,
     "bold":         1,
     "faint":        2,
-    #"italic":       3,
+    # "italic":       3,
     "underline":    4,
-    #"blink_slow":   5,
-    #"blink_rapid":  6,
+    # "blink_slow":   5,
+    # "blink_rapid":  6,
     "inverse":      7,
-    #"conceal":      8,
-    #"crossed_out":  9
+    # "conceal":      8,
+    # "crossed_out":  9
     # Text colors.
     "black":       30,
     "red":         31,
@@ -571,7 +571,7 @@ COLORS = None
 def _colorize(color, text):
     """Returns a string that prints the given text in the given color
     in a terminal that is ANSI color-aware. The color must be a list of strings
-    out of ANSI_CODES.
+    from ANSI_CODES.
     """
     # Construct escape sequence to be put before the text by iterating
     # over all "ANSI codes" in `color`.
@@ -609,7 +609,7 @@ def colorize(color_name, text):
                     if color_def in LEGACY_COLORS:
                         color_def = LEGACY_COLORS[color_def]
                     else:
-                        raise ValueError('no such color %s', color)
+                        raise ValueError('no such color %s', color_def)
 
                 COLORS[name] = color_def
         # In case a 3rd party plugin is still passing the actual color ('red')
@@ -661,7 +661,8 @@ def _colordiff(a, b):
     highlight_removed = 'text_diff_removed'
     minor_highlight = 'text_highlight_minor'
 
-    if not isinstance(a, six.string_types) or not isinstance(b, six.string_types):
+    if not isinstance(a, six.string_types) or \
+            not isinstance(b, six.string_types):
         # Non-strings: use ordinary equality.
         a = six.text_type(a)
         b = six.text_type(b)
@@ -678,9 +679,14 @@ def _colordiff(a, b):
     a_out = []
     b_out = []
 
-    add_mapper    = lambda w: w if re.match('(\s)', w) else colorize(highlight_added, w)
-    remove_mapper = lambda w: w if re.match('(\s)', w) else colorize(highlight_removed, w)
-    minor_mapper  = lambda w: w if re.match('(\s)', w) else colorize(minor_highlight, w)
+    add_mapper = lambda w: w if re.match(r'(\s)', w) \
+        else colorize(highlight_added, w)
+
+    remove_mapper = lambda w: w if re.match(r'(\s)', w) \
+        else colorize(highlight_removed, w)
+
+    minor_mapper = lambda w: w if re.match(r'(\s)', w) \
+        else colorize(minor_highlight, w)
 
     matcher = SequenceMatcher(lambda x: False, a, b)
     for op, a_start, a_end, b_start, b_end in matcher.get_opcodes():
@@ -690,19 +696,19 @@ def _colordiff(a, b):
             b_out.append(b[b_start:b_end])
         elif op == 'insert':
             # Right only.
-            words = re.split('(\s)', b[b_start:b_end])
+            words = re.split(r'(\s)', b[b_start:b_end])
             words_colorized = map(add_mapper, words)
             b_out.append(''.join(words_colorized))
         elif op == 'delete':
             # Left only.
-            words = re.split('(\s)', a[a_start:a_end])
+            words = re.split(r'(\s)', a[a_start:a_end])
             words_colorized = map(remove_mapper, words)
             a_out.append(''.join(words_colorized))
         elif op == 'replace':
             # Right and left differ. Colorise with second highlight if
             # it's just a case change.
-            words_a = re.split('(\s)', a[a_start:a_end])
-            words_b = re.split('(\s)', b[b_start:b_end])
+            words_a = re.split(r'(\s)', a[a_start:a_end])
+            words_b = re.split(r'(\s)', b[b_start:b_end])
             if a[a_start:a_end].lower() != b[b_start:b_end].lower():
                 words_a_colorized = map(remove_mapper, words_a)
                 words_b_colorized = map(add_mapper, words_b)
@@ -794,20 +800,20 @@ def split_into_lines(string, raw_string, width_tuple):
     first_width, middle_width, last_width = width_tuple
 
     words_raw = raw_string.split()
-    words     = string.split()
+    words = string.split()
     assert len(words_raw) == len(words)
-    result = { 'col': [], 'raw': [] }
+    result = {'col': [], 'raw': []}
     next_substr_raw = u''
-    next_substr     = u''
+    next_substr = u''
 
     # Iterate over all words.
     for i in range(len(words_raw)):
         if i == 0:
             pot_substr_raw = words_raw[i]
-            pot_substr     = words[i]
+            pot_substr = words[i]
         else:
             pot_substr_raw = ' '.join([next_substr_raw, words_raw[i]])
-            pot_substr     = ' '.join([next_substr,     words[i]])
+            pot_substr = ' '.join([next_substr, words[i]])
 
         # Find out if the pot(ential)_substr fits into the next substring.
         fits_first = \
@@ -816,12 +822,12 @@ def split_into_lines(string, raw_string, width_tuple):
             (len(result['raw']) != 0 and len(pot_substr_raw) <= middle_width)
         if fits_first or fits_middle:
             next_substr_raw = pot_substr_raw
-            next_substr     = pot_substr
+            next_substr = pot_substr
         else:
             result['raw'].append(next_substr_raw)
             result['col'].append(next_substr)
             next_substr_raw = words_raw[i]
-            next_substr     = words[i]
+            next_substr = words[i]
 
     # We finished constructing the substrings, but the last substring
     # has not yet been added to the result.
