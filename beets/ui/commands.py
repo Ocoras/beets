@@ -177,7 +177,7 @@ def disambig_string(info):
             disambig.append(info.albumdisambig)
 
     if disambig:
-        return ui.colorize('text_faint', u' | '.join(disambig))
+        return ui.colorize('text_highlight_minor', u' | '.join(disambig))
 
 
 def dist_colorize(string, dist):
@@ -272,7 +272,7 @@ class ChangeRepresentation(object):
 
         # Data URL.
         if self.match.info.data_url:
-            url = ui.colorize('text_highlight_minor', u'{}'.format(self.match.info.data_url))
+            url = ui.colorize('text_faint', u'{}'.format(self.match.info.data_url))
             print_(self.indent_header + url)
 
     def show_match_details(self):
