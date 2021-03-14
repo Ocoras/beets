@@ -177,7 +177,7 @@ def disambig_string(info):
             disambig.append(info.albumdisambig)
 
     if disambig:
-        return ui.colorize('text_highlight_minor', u' | '.join(disambig))
+        return ui.colorize('text_faint', u' | '.join(disambig))
 
 
 def dist_colorize(string, dist):
@@ -743,6 +743,27 @@ class AlbumChange(ChangeRepresentation):
                 lines.append((info, lhs, rhs))
         self.print_lines(lines)
 
+        # Missing and unmatched tracks.
+        if self.match.extra_tracks:
+            print_('Missing tracks ({0}/{1} - {2:.1%}):'.format(
+                   len(self.match.extra_tracks),
+                   len(self.match.info.tracks),
+                   len(self.match.extra_tracks) / len(self.match.info.tracks)
+                   ))
+        for track_info in self.match.extra_tracks:
+            line = u' ! {} (#{})'.format(
+                track_info.title, self.format_index(track_info))
+            if track_info.length:
+                line += u' ({})'.format(ui.human_seconds_short(track_info.length))
+            print_(ui.colorize('text_warning', line))
+        if self.match.extra_items:
+            print_(u'Unmatched tracks ({0}):'.format(len(self.match.extra_items)))
+        for item in self.match.extra_items:
+            line = u' ! {} (#{})'.format(item.title, self.format_index(item))
+            if item.length:
+                line += u' ({})'.format(ui.human_seconds_short(item.length))
+            print_(ui.colorize('text_warning', line))
+
 
 class TrackChange(ChangeRepresentation):
     """Track change representation, setting cur_title
@@ -765,36 +786,6 @@ def show_change(cur_artist, cur_album, match):
     album's tags are changed according to `match`, which must be an AlbumMatch
     object.
     """
-
-    def show_match_tracks():
-        """Move these functions to CHange Representation above.
-        """
-
-        ### -----------------------------------------------------------------
-        ### Missing and unmatched tracks
-        ### -----------------------------------------------------------------
-
-        # Missing and unmatched tracks.
-        if match.extra_tracks:
-            print_('Missing tracks ({0}/{1} - {2:.1%}):'.format(
-                   len(match.extra_tracks),
-                   len(match.info.tracks),
-                   len(match.extra_tracks) / len(match.info.tracks)
-                   ))
-        for track_info in match.extra_tracks:
-            line = u' ! {} (#{})'.format(
-                track_info.title, format_index(track_info))
-            if track_info.length:
-                line += u' ({})'.format(ui.human_seconds_short(track_info.length))
-            print_(ui.colorize('text_warning', line))
-        if match.extra_items:
-            print_(u'Unmatched tracks ({0}):'.format(len(match.extra_items)))
-        for item in match.extra_items:
-            line = u' ! {} (#{})'.format(item.title, format_index(item))
-            if item.length:
-                line += u' ({})'.format(ui.human_seconds_short(item.length))
-            print_(ui.colorize('text_warning', line))
-
     change = AlbumChange(
         cur_artist=cur_artist,
         cur_album=cur_album,
@@ -807,7 +798,7 @@ def show_change(cur_artist, cur_album, match):
     change.show_match_details()
 
     # Print the match tracks.
-    change.show_match_tracks()  # incomplete - need to handle missing tracks
+    change.show_match_tracks()
 
 
 def show_item_change(item, match):
