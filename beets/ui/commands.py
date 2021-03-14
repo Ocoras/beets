@@ -260,8 +260,12 @@ class ChangeRepresentation(object):
                 dist_string(
                     self.match.distance)))
 
-        # Artist name and album title.
-        artist_album_str = u'{0.artist} - {0.album}'.format(self.match.info)
+        if self.match.info.get('album'):
+            # Matching an album - print that
+            artist_album_str = u'{0.artist} - {0.album}'.format(self.match.info)
+        else:
+            # Matching a single track
+            artist_album_str = u'{0.artist} - {0.title}'.format(self.match.info)
         print_(
             self.indent_header +
             dist_colorize(
@@ -766,19 +770,14 @@ class AlbumChange(ChangeRepresentation):
 
 
 class TrackChange(ChangeRepresentation):
-    """Track change representation, setting cur_title
+    """Track change representation, comparing item with match.
     """
 
-    def __init__(self, cur_artist, cur_title, match):
+    def __init__(self, cur_artist,cur_title, match):
         super().__init__()
         self.cur_artist = cur_artist
         self.cur_title = cur_title
         self.match = match
-
-    def show_single_change(self, track_info):
-        # ToDo - Use above printing to print out a single track change only
-        # something like:
-        line = self.make_line(self.match, track_info)
 
 
 def show_change(cur_artist, cur_album, match):
@@ -809,7 +808,6 @@ def show_item_change(item, match):
         cur_artist=item.artist,
         cur_title=item.title,
         match=match)
-
     # Print the match header.
     change.show_match_header()
     # Print the match details.
