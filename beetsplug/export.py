@@ -26,14 +26,15 @@ from xml.etree import ElementTree
 from datetime import datetime, date
 from beets.plugins import BeetsPlugin
 from beets import ui
+from beets import util
 import mediafile
-from beetsplug.info import make_key_filter, library_data, tag_data
+from beetsplug.info import library_data, tag_data
 
 
 class ExportEncoder(json.JSONEncoder):
     """Deals with dates because JSON doesn't have a standard"""
     def default(self, o):
-        if isinstance(o, datetime) or isinstance(o, date):
+        if isinstance(o, (datetime, date)):
             return o.isoformat()
         return json.JSONEncoder.default(self, o)
 
@@ -50,6 +51,14 @@ class ExportPlugin(BeetsPlugin):
                 'formatting': {
                     'ensure_ascii': False,
                     'indent': 4,
+                    'separators': (',', ': '),
+                    'sort_keys': True
+                }
+            },
+            'jsonlines': {
+                # JSON Lines formatting options.
+                'formatting': {
+                    'ensure_ascii': False,
                     'separators': (',', ': '),
                     'sort_keys': True
                 }
@@ -95,7 +104,7 @@ class ExportPlugin(BeetsPlugin):
         )
         cmd.parser.add_option(
             u'-f', u'--format', default='json',
-            help=u"the output format: json (default), csv, or xml"
+            help=u"the output format: json (default), jsonlines, csv, or xml"
         )
         return [cmd]
 
@@ -103,6 +112,7 @@ class ExportPlugin(BeetsPlugin):
         file_path = opts.output
         file_mode = 'a' if opts.append else 'w'
         file_format = opts.format or self.config['default_format'].get(str)
+        file_format_is_line_based = (file_format == 'jsonlines')
         format_options = self.config[file_format]['formatting'].get(dict)
 
         export_format = ExportFormat.factory(
@@ -120,19 +130,26 @@ class ExportPlugin(BeetsPlugin):
         for keys in opts.included_keys:
             included_keys.extend(keys.split(','))
 
-        key_filter = make_key_filter(included_keys)
-
         for data_emitter in data_collector(lib, ui.decargs(args)):
             try:
-                data, item = data_emitter()
+                data, item = data_emitter(included_keys or '*')
             except (mediafile.UnreadableFileError, IOError) as ex:
                 self._log.error(u'cannot read file: {0}', ex)
                 continue
 
-            data = key_filter(data)
+            for key, value in data.items():
+                if isinstance(value, bytes):
+                    data[key] = util.displayable_path(value)
+
             items += [data]
 
-        export_format.export(items, **format_options)
+            if file_format_is_line_based:
+                export_format.export(data, **format_options)
+            else:
+                items += [data]
+
+        if not file_format_is_line_based:
+            export_format.export(items, **format_options)
 
 
 class ExportFormat(object):
@@ -147,7 +164,7 @@ class ExportFormat(object):
 
     @classmethod
     def factory(cls, file_type, **kwargs):
-        if file_type == "json":
+        if file_type in ["json", "jsonlines"]:
             return JsonFormat(**kwargs)
         elif file_type == "csv":
             return CSVFormat(**kwargs)
@@ -167,6 +184,7 @@ class JsonFormat(ExportFormat):
 
     def export(self, data, **kwargs):
         json.dump(data, self.out_stream, cls=ExportEncoder, **kwargs)
+        self.out_stream.write('\n')
 
 
 class CSVFormat(ExportFormat):

@@ -33,7 +33,8 @@ import six
 from six.moves import urllib
 
 try:
-    from bs4 import SoupStrainer, BeautifulSoup
+    import bs4
+    from bs4 import SoupStrainer
     HAS_BEAUTIFUL_SOUP = True
 except ImportError:
     HAS_BEAUTIFUL_SOUP = False
@@ -55,7 +56,6 @@ except ImportError:
 
 from beets import plugins
 from beets import ui
-from beets import util
 import beets
 
 DIV_RE = re.compile(r'<(/?)div>?', re.I)
@@ -145,39 +145,6 @@ def extract_text_between(html, start_marker, end_marker):
     return html
 
 
-def extract_text_in(html, starttag):
-    """Extract the text from a <DIV> tag in the HTML starting with
-    ``starttag``. Returns None if parsing fails.
-    """
-    # Strip off the leading text before opening tag.
-    try:
-        _, html = html.split(starttag, 1)
-    except ValueError:
-        return
-
-    # Walk through balanced DIV tags.
-    level = 0
-    parts = []
-    pos = 0
-    for match in DIV_RE.finditer(html):
-        if match.group(1):  # Closing tag.
-            level -= 1
-            if level == 0:
-                pos = match.end()
-        else:  # Opening tag.
-            if level == 0:
-                parts.append(html[pos:match.start()])
-            level += 1
-
-        if level == -1:
-            parts.append(html[pos:match.start()])
-            break
-    else:
-        print(u'no closing tag found!')
-        return
-    return u''.join(parts)
-
-
 def search_pairs(item):
     """Yield a pairs of artists and titles to search for.
 
@@ -253,7 +220,20 @@ def slug(text):
     return re.sub(r'\W+', '-', unidecode(text).lower().strip()).strip('-')
 
 
+if HAS_BEAUTIFUL_SOUP:
+    def try_parse_html(html, **kwargs):
+        try:
+            return bs4.BeautifulSoup(html, 'html.parser', **kwargs)
+        except HTMLParseError:
+            return None
+else:
+    def try_parse_html(html, **kwargs):
+        return None
+
+
 class Backend(object):
+    REQUIRES_BS = False
+
     def __init__(self, config, log):
         self._log = log
 
@@ -291,14 +271,15 @@ class Backend(object):
             return r.text
         else:
             self._log.debug(u'failed to fetch: {0} ({1})', url, r.status_code)
+            return None
 
     def fetch(self, artist, title):
         raise NotImplementedError()
 
 
-class SymbolsReplaced(Backend):
+class MusiXmatch(Backend):
     REPLACEMENTS = {
-        r'\s+': '_',
+        r'\s+': '-',
         '<': 'Less_Than',
         '>': 'Greater_Than',
         '#': 'Number_',
@@ -306,39 +287,40 @@ class SymbolsReplaced(Backend):
         r'[\]\}]': ')',
     }
 
+    URL_PATTERN = 'https://www.musixmatch.com/lyrics/%s/%s'
+
     @classmethod
     def _encode(cls, s):
         for old, new in cls.REPLACEMENTS.items():
             s = re.sub(old, new, s)
 
-        return super(SymbolsReplaced, cls)._encode(s)
-
-
-class MusiXmatch(SymbolsReplaced):
-    REPLACEMENTS = dict(SymbolsReplaced.REPLACEMENTS, **{
-        r'\s+': '-'
-    })
-
-    URL_PATTERN = 'https://www.musixmatch.com/lyrics/%s/%s'
+        return super(MusiXmatch, cls)._encode(s)
 
     def fetch(self, artist, title):
         url = self.build_url(artist, title)
 
         html = self.fetch_url(url)
         if not html:
-            return
+            return None
         if "We detected that your IP is blocked" in html:
             self._log.warning(u'we are blocked at MusixMatch: url %s failed'
                               % url)
-            return
-        html_part = html.split('<p class="mxm-lyrics__content')[-1]
-        lyrics = extract_text_between(html_part, '>', '</p>')
+            return None
+        html_parts = html.split('<p class="mxm-lyrics__content')
+        # Sometimes lyrics come in 2 or more parts
+        lyrics_parts = []
+        for html_part in html_parts:
+            lyrics_parts.append(extract_text_between(html_part, '>', '</p>'))
+        lyrics = '\n'.join(lyrics_parts)
         lyrics = lyrics.strip(',"').replace('\\n', '\n')
         # another odd case: sometimes only that string remains, for
         # missing songs. this seems to happen after being blocked
         # above, when filling in the CAPTCHA.
         if "Instant lyrics for all your music." in lyrics:
-            return
+            return None
+        # sometimes there are non-existent lyrics with some content
+        if 'Lyrics | Musixmatch' in lyrics:
+            return None
         return lyrics
 
 
@@ -348,6 +330,8 @@ class Genius(Backend):
     Simply adapted from
     bigishdata.com/2016/09/27/getting-song-lyrics-from-geniuss-api-scraping/
     """
+
+    REQUIRES_BS = True
 
     base_url = "https://api.genius.com"
 
@@ -376,11 +360,14 @@ class Genius(Backend):
             hit_artist = hit["result"]["primary_artist"]["name"]
 
             if slug(hit_artist) == slug(artist):
-                return self._scrape_lyrics_from_html(
-                    self.fetch_url(hit["result"]["url"]))
+                html = self.fetch_url(hit["result"]["url"])
+                if not html:
+                    return None
+                return self._scrape_lyrics_from_html(html)
 
         self._log.debug(u'Genius failed to find a matching artist for \'{0}\'',
                         artist)
+        return None
 
     def _search(self, artist, title):
         """Searches the genius api for a given artist and title
@@ -406,22 +393,24 @@ class Genius(Backend):
     def _scrape_lyrics_from_html(self, html):
         """Scrape lyrics from a given genius.com html"""
 
-        html = BeautifulSoup(html, "html.parser")
+        soup = try_parse_html(html)
+        if not soup:
+            return
 
         # Remove script tags that they put in the middle of the lyrics.
-        [h.extract() for h in html('script')]
+        [h.extract() for h in soup('script')]
 
         # Most of the time, the page contains a div with class="lyrics" where
         # all of the lyrics can be found already correctly formatted
         # Sometimes, though, it packages the lyrics into separate divs, most
         # likely for easier ad placement
-        lyrics_div = html.find("div", class_="lyrics")
+        lyrics_div = soup.find("div", class_="lyrics")
         if not lyrics_div:
             self._log.debug(u'Received unusual song page html')
-            verse_div = html.find("div",
+            verse_div = soup.find("div",
                                   class_=re.compile("Lyrics__Container"))
             if not verse_div:
-                if html.find("div",
+                if soup.find("div",
                              class_=re.compile("LyricsPlaceholder__Message"),
                              string="This song is an instrumental"):
                     self._log.debug('Detected instrumental')
@@ -441,28 +430,60 @@ class Genius(Backend):
         return lyrics_div.get_text()
 
 
-class LyricsWiki(SymbolsReplaced):
-    """Fetch lyrics from LyricsWiki."""
+class Tekstowo(Backend):
+    # Fetch lyrics from Tekstowo.pl.
+    REQUIRES_BS = True
 
-    if util.SNI_SUPPORTED:
-        URL_PATTERN = 'https://lyrics.wikia.com/%s:%s'
-    else:
-        URL_PATTERN = 'http://lyrics.wikia.com/%s:%s'
+    BASE_URL = 'http://www.tekstowo.pl'
+    URL_PATTERN = BASE_URL + '/wyszukaj.html?search-title=%s&search-artist=%s'
 
     def fetch(self, artist, title):
-        url = self.build_url(artist, title)
-        html = self.fetch_url(url)
-        if not html:
-            return
+        url = self.build_url(title, artist)
+        search_results = self.fetch_url(url)
+        if not search_results:
+            return None
+        song_page_url = self.parse_search_results(search_results)
 
-        # Get the HTML fragment inside the appropriate HTML element and then
-        # extract the text from it.
-        html_frag = extract_text_in(html, u"<div class='lyricbox'>")
-        if html_frag:
-            lyrics = _scrape_strip_cruft(html_frag, True)
+        if not song_page_url:
+            return None
 
-            if lyrics and 'Unfortunately, we are not licensed' not in lyrics:
-                return lyrics
+        song_page_html = self.fetch_url(song_page_url)
+        if not song_page_html:
+            return None
+        return self.extract_lyrics(song_page_html)
+
+    def parse_search_results(self, html):
+        html = _scrape_strip_cruft(html)
+        html = _scrape_merge_paragraphs(html)
+
+        soup = try_parse_html(html)
+        if not soup:
+            return None
+
+        song_rows = soup.find("div", class_="content"). \
+            find("div", class_="card"). \
+            find_all("div", class_="box-przeboje")
+
+        if not song_rows:
+            return None
+
+        song_row = song_rows[0]
+
+        if not song_row:
+            return None
+
+        href = song_row.find('a').get('href')
+        return self.BASE_URL + href
+
+    def extract_lyrics(self, html):
+        html = _scrape_strip_cruft(html)
+        html = _scrape_merge_paragraphs(html)
+
+        soup = try_parse_html(html)
+        if not soup:
+            return None
+
+        return soup.find("div", class_="song-text").get_text()
 
 
 def remove_credits(text):
@@ -488,6 +509,7 @@ def _scrape_strip_cruft(html, plain_text_out=False):
     html = re.sub(r' +', ' ', html)  # Whitespaces collapse.
     html = BREAK_RE.sub('\n', html)  # <br> eats up surrounding '\n'.
     html = re.sub(r'(?s)<(script).*?</\1>', '', html)  # Strip script tags.
+    html = re.sub(u'\u2005', " ", html)  # replace unicode with regular space
 
     if plain_text_out:  # Strip remaining HTML tags
         html = COMMENT_RE.sub('', html)
@@ -507,12 +529,6 @@ def scrape_lyrics_from_html(html):
     """Scrape lyrics from a URL. If no lyrics can be found, return None
     instead.
     """
-    if not HAS_BEAUTIFUL_SOUP:
-        return None
-
-    if not html:
-        return None
-
     def is_text_notcode(text):
         length = len(text)
         return (length > 20 and
@@ -522,10 +538,8 @@ def scrape_lyrics_from_html(html):
     html = _scrape_merge_paragraphs(html)
 
     # extract all long text blocks that are not code
-    try:
-        soup = BeautifulSoup(html, "html.parser",
-                             parse_only=SoupStrainer(text=is_text_notcode))
-    except HTMLParseError:
+    soup = try_parse_html(html, parse_only=SoupStrainer(text=is_text_notcode))
+    if not soup:
         return None
 
     # Get the longest text element (if any).
@@ -538,6 +552,8 @@ def scrape_lyrics_from_html(html):
 
 class Google(Backend):
     """Fetch lyrics from Google search results."""
+
+    REQUIRES_BS = True
 
     def __init__(self, config, log):
         super(Google, self).__init__(config, log)
@@ -645,6 +661,8 @@ class Google(Backend):
                                               title, artist):
                     continue
                 html = self.fetch_url(url_link)
+                if not html:
+                    continue
                 lyrics = scrape_lyrics_from_html(html)
                 if not lyrics:
                     continue
@@ -654,14 +672,16 @@ class Google(Backend):
                                     item['displayLink'])
                     return lyrics
 
+        return None
+
 
 class LyricsPlugin(plugins.BeetsPlugin):
-    SOURCES = ['google', 'lyricwiki', 'musixmatch', 'genius']
+    SOURCES = ['google', 'musixmatch', 'genius', 'tekstowo']
     SOURCE_BACKENDS = {
         'google': Google,
-        'lyricwiki': LyricsWiki,
         'musixmatch': MusiXmatch,
         'genius': Genius,
+        'tekstowo': Tekstowo,
     }
 
     def __init__(self):
@@ -700,6 +720,9 @@ class LyricsPlugin(plugins.BeetsPlugin):
         sources = plugins.sanitize_choices(
             self.config['sources'].as_str_seq(), available_sources)
 
+        if not HAS_BEAUTIFUL_SOUP:
+            sources = self.sanitize_bs_sources(sources)
+
         if 'google' in sources:
             if not self.config['google_API_key'].get():
                 # We log a *debug* message here because the default
@@ -709,18 +732,6 @@ class LyricsPlugin(plugins.BeetsPlugin):
                 self._log.debug(u'Disabling google source: '
                                 u'no API key configured.')
                 sources.remove('google')
-            elif not HAS_BEAUTIFUL_SOUP:
-                self._log.warning(u'To use the google lyrics source, you must '
-                                  u'install the beautifulsoup4 module. See '
-                                  u'the documentation for further details.')
-                sources.remove('google')
-
-        if 'genius' in sources and not HAS_BEAUTIFUL_SOUP:
-            self._log.debug(
-                u'The Genius backend requires BeautifulSoup, which is not '
-                u'installed, so the source is disabled.'
-            )
-            sources.remove('genius')
 
         self.config['bing_lang_from'] = [
             x.lower() for x in self.config['bing_lang_from'].as_str_seq()]
@@ -733,6 +744,19 @@ class LyricsPlugin(plugins.BeetsPlugin):
 
         self.backends = [self.SOURCE_BACKENDS[source](self.config, self._log)
                          for source in sources]
+
+    def sanitize_bs_sources(self, sources):
+        enabled_sources = []
+        for source in sources:
+            if source.REQUIRES_BS:
+                self._log.debug(u'To use the %s lyrics source, you must '
+                                u'install the beautifulsoup4 module. See '
+                                u'the documentation for further details.'
+                                % source)
+            else:
+                enabled_sources.append(source)
+
+        return enabled_sources
 
     def get_bing_access_token(self):
         params = {

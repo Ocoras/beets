@@ -113,7 +113,6 @@ setup(
         'test': [
             'beautifulsoup4',
             'coverage',
-            'discogs-client',
             'flask',
             'mock',
             'pylast',
@@ -122,17 +121,20 @@ setup(
             'pyxdg',
             'responses>=0.3.0',
             'requests_oauthlib',
-            'twitter',
-            'Pillow',
+            'reflink',
         ] + (
             # Tests for the thumbnails plugin need pathlib on Python 2 too.
             ['pathlib'] if (sys.version_info < (3, 4, 0)) else []
         ) + [
             'rarfile<4' if sys.version_info < (3, 6, 0) else 'rarfile',
-        ],
+        ] + [
+            'discogs-client' if (sys.version_info < (3, 0, 0))
+            else 'python3-discogs-client'
+        ] + (
+            ['py7zr'] if (sys.version_info > (3, 5, 0)) else []
+        ),
         'lint': [
             'flake8',
-            'flake8-blind-except',
             'flake8-coding',
             'flake8-docstrings',
             'flake8-future-import',
@@ -146,7 +148,10 @@ setup(
         'embyupdate': ['requests'],
         'chroma': ['pyacoustid'],
         'gmusic': ['gmusicapi'],
-        'discogs': ['discogs-client>=2.2.1'],
+        'discogs': (
+            ['discogs-client' if (sys.version_info < (3, 0, 0))
+                else 'python3-discogs-client']
+        ),
         'beatport': ['requests-oauthlib>=0.6.1'],
         'kodiupdate': ['requests'],
         'lastgenre': ['pylast'],
@@ -166,6 +171,7 @@ setup(
         'bpd': ['PyGObject'],
         'replaygain': ['PyGObject'],
         'tweet': ['twitter'],
+        'reflink': ['reflink'],
     },
     # Non-Python/non-PyPI plugin dependencies:
     #   chroma: chromaprint or fpcalc
@@ -175,8 +181,10 @@ setup(
     #   embedart: ImageMagick
     #   absubmit: extractor binary from https://acousticbrainz.org/download
     #   keyfinder: KeyFinder
-    #   replaygain: python-gi and GStreamer 1.0+ or mp3gain/aacgain
+    #   replaygain: python-gi and GStreamer 1.0+
+    #               or mp3gain/aacgain
     #               or Python Audio Tools
+    #               or ffmpeg
     #   ipfs: go-ipfs
 
     classifiers=[
@@ -193,6 +201,7 @@ setup(
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: Implementation :: CPython',
     ],
 )

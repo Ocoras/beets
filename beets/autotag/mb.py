@@ -23,6 +23,7 @@ import traceback
 from six.moves.urllib.parse import urljoin
 
 from beets import logging
+from beets import plugins
 import beets.autotag.hooks
 import beets
 from beets import util
@@ -70,10 +71,18 @@ log = logging.getLogger('beets')
 RELEASE_INCLUDES = ['artists', 'media', 'recordings', 'release-groups',
                     'labels', 'artist-credits', 'aliases',
                     'recording-level-rels', 'work-rels',
-                    'work-level-rels', 'artist-rels']
-TRACK_INCLUDES = ['artists', 'aliases']
+                    'work-level-rels', 'artist-rels', 'isrcs']
+BROWSE_INCLUDES = ['artist-credits', 'work-rels',
+                   'artist-rels', 'recording-rels', 'release-rels']
+if "work-level-rels" in musicbrainzngs.VALID_BROWSE_INCLUDES['recording']:
+    BROWSE_INCLUDES.append("work-level-rels")
+BROWSE_CHUNKSIZE = 100
+BROWSE_MAXTRACKS = 500
+TRACK_INCLUDES = ['artists', 'aliases', 'isrcs']
 if 'work-level-rels' in musicbrainzngs.VALID_INCLUDES['recording']:
     TRACK_INCLUDES += ['work-level-rels', 'artist-rels']
+if 'genres' in musicbrainzngs.VALID_INCLUDES['recording']:
+    RELEASE_INCLUDES += ['genres']
 
 
 def track_url(trackid):
@@ -89,7 +98,11 @@ def configure():
     from the beets configuration. This should be called at startup.
     """
     hostname = config['musicbrainz']['host'].as_str()
-    musicbrainzngs.set_hostname(hostname)
+    https = config['musicbrainz']['https'].get(bool)
+    # Only call set_hostname when a custom server is configured. Since
+    # musicbrainz-ngs connects to musicbrainz.org with HTTPS by default
+    if hostname != "musicbrainz.org":
+        musicbrainzngs.set_hostname(hostname, https)
     musicbrainzngs.set_rate_limit(
         config['musicbrainz']['ratelimit_interval'].as_number(),
         config['musicbrainz']['ratelimit'].get(int),
@@ -215,6 +228,11 @@ def track_info(recording, index=None, medium=None, medium_index=None,
     if recording.get('length'):
         info.length = int(recording['length']) / (1000.0)
 
+    info.trackdisambig = recording.get('disambiguation')
+
+    if recording.get('isrc-list'):
+        info.isrc = ';'.join(recording['isrc-list'])
+
     lyricist = []
     composer = []
     composer_sort = []
@@ -251,6 +269,11 @@ def track_info(recording, index=None, medium=None, medium_index=None,
     if arranger:
         info.arranger = u', '.join(arranger)
 
+    # Supplementary fields provided by plugins
+    extra_trackdatas = plugins.send('mb_track_extract', data=recording)
+    for extra_trackdata in extra_trackdatas:
+        info.update(extra_trackdata)
+
     info.decode()
     return info
 
@@ -282,6 +305,26 @@ def album_info(release):
     # Get artist name using join phrases.
     artist_name, artist_sort_name, artist_credit_name = \
         _flatten_artist_credit(release['artist-credit'])
+
+    ntracks = sum(len(m['track-list']) for m in release['medium-list'])
+
+    # The MusicBrainz API omits 'artist-relation-list' and 'work-relation-list'
+    # when the release has more than 500 tracks. So we use browse_recordings
+    # on chunks of tracks to recover the same information in this case.
+    if ntracks > BROWSE_MAXTRACKS:
+        log.debug(u'Album {} has too many tracks', release['id'])
+        recording_list = []
+        for i in range(0, ntracks, BROWSE_CHUNKSIZE):
+            log.debug(u'Retrieving tracks starting at {}', i)
+            recording_list.extend(musicbrainzngs.browse_recordings(
+                    release=release['id'], limit=BROWSE_CHUNKSIZE,
+                    includes=BROWSE_INCLUDES,
+                    offset=i)['recording-list'])
+        track_map = {r['id']: r for r in recording_list}
+        for medium in release['medium-list']:
+            for recording in medium['track-list']:
+                recording_info = track_map[recording['recording']['id']]
+                recording['recording'] = recording_info
 
     # Basic info.
     track_infos = []
@@ -414,6 +457,14 @@ def album_info(release):
     if release['medium-list']:
         first_medium = release['medium-list'][0]
         info.media = first_medium.get('format')
+
+    genres = release.get('genre-list')
+    if config['musicbrainz']['genres'] and genres:
+        info.genre = ';'.join(g['name'] for g in genres)
+
+    extra_albumdatas = plugins.send('mb_album_extract', data=release)
+    for extra_albumdata in extra_albumdatas:
+        info.update(extra_albumdata)
 
     info.decode()
     return info

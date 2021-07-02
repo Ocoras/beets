@@ -78,6 +78,11 @@ def pil_resize(maxwidth, path_in, path_out=None, quality=0, max_filesize=0):
         im = Image.open(util.syspath(path_in))
         size = maxwidth, maxwidth
         im.thumbnail(size, Image.ANTIALIAS)
+
+        if quality == 0:
+            # Use PIL's default quality.
+            quality = -1
+
         im.save(util.py3_path(path_out), quality=quality)
         if max_filesize > 0:
             # If maximum filesize is set, we attempt to lower the quality of
@@ -87,17 +92,16 @@ def pil_resize(maxwidth, path_in, path_out=None, quality=0, max_filesize=0):
                 lower_qual = quality
             else:
                 lower_qual = 95
-            for i in range(3):
-                # 3 attempts is an abitrary choice
-                filesize = os.stat(path_out).st_size
+
+            for i in range(5):
+                # 5 attempts is an abitrary choice
+                filesize = os.stat(util.syspath(path_out)).st_size
                 log.debug(u"PIL Pass {0} : Output size: {1}B", i, filesize)
                 if filesize <= max_filesize:
                     return path_out
-                # Calculate percentage decrease required. This is approximate,
-                # as quality may only loosely correlate with filesize.
-                frac_diff = 1 - ((filesize - max_filesize) / max_filesize)
-                assert frac_diff < 1
-                lower_qual = lower_qual * frac_diff
+                # The relationship between filesize & quality will be
+                # image dependent.
+                lower_qual -= 10
                 # Restrict quality dropping below 10
                 if lower_qual < 10:
                     lower_qual = 10
@@ -105,8 +109,9 @@ def pil_resize(maxwidth, path_in, path_out=None, quality=0, max_filesize=0):
                 im.save(
                     util.py3_path(path_out), quality=lower_qual, optimize=True
                 )
-            log.error(u"PIL Failed to resize file to below {0}B", max_filesize)
-            raise IOError
+            log.warning(u"PIL Failed to resize file to below {0}B",
+                        max_filesize)
+            return path_out
 
         else:
             return path_out
@@ -146,6 +151,8 @@ def im_resize(maxwidth, path_in, path_out=None, quality=0, max_filesize=0):
     if quality > 0:
         cmd += ['-quality', '{0}'.format(quality)]
 
+    # "-define jpeg:extent=SIZEb" sets the target filesize for imagemagick to
+    # SIZE in bytes.
     if max_filesize > 0:
         cmd += ['-define', 'jpeg:extent={0}b'.format(max_filesize)]
 

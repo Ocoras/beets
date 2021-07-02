@@ -356,7 +356,6 @@ Sets the albumartist for various-artist compilations. Defaults to ``'Various
 Artists'`` (the MusicBrainz standard). Affects other sources, such as
 :doc:`/plugins/discogs`, too.
 
-
 UI Options
 ----------
 
@@ -476,12 +475,34 @@ hardlink
 ~~~~~~~~
 
 Either ``yes`` or ``no``, indicating whether to use hard links instead of
-moving or copying or symlinking files. (It conflicts with the ``move``,
+moving, copying, or symlinking files. (It conflicts with the ``move``,
 ``copy``, and ``link`` options.) Defaults to ``no``.
 
 As with symbolic links (see :ref:`link`, above), this will not work on Windows
 and you will want to set ``write`` to ``no``.  Otherwise, metadata on the
 original file will be modified.
+
+.. _reflink:
+
+reflink
+~~~~~~~
+
+Either ``yes``, ``no``, or ``auto``, indicating whether to use copy-on-write
+`file clones`_ (a.k.a. "reflinks") instead of copying or moving files.
+The ``auto`` option uses reflinks when possible and falls back to plain
+copying when necessary.
+Defaults to ``no``.
+
+This kind of clone is only available on certain filesystems: for example,
+btrfs and APFS. For more details on filesystem support, see the `pyreflink`_
+documentation.  Note that you need to install ``pyreflink``, either through
+``python -m pip install beets[reflink]`` or ``python -m pip install reflink``.
+
+The option is ignored if ``move`` is enabled (i.e., beets can move or
+copy files but it doesn't make sense to do both).
+
+.. _file clones: https://blogs.oracle.com/otn/save-disk-space-on-linux-by-cloning-files-on-btrfs-and-ocfs2
+.. _pyreflink: https://reflink.readthedocs.io/en/latest/
 
 resume
 ~~~~~~
@@ -662,6 +683,9 @@ Here's an example::
 Other field/value pairs supplied via the ``--set`` option on the command-line
 override any settings here for fields with the same name.
 
+Fields are set on both the album and each individual track of the album.
+Fields are persisted to the media files of each track.
+
 Default: ``{}`` (empty).
 
 .. _musicbrainz-config:
@@ -670,15 +694,18 @@ MusicBrainz Options
 -------------------
 
 You can instruct beets to use `your own MusicBrainz database`_ instead of
-the `main server`_. Use the ``host`` and ``ratelimit`` options under a
-``musicbrainz:`` header, like so::
+the `main server`_. Use the ``host``, ``https`` and ``ratelimit`` options
+under a ``musicbrainz:`` header, like so::
 
     musicbrainz:
         host: localhost:5000
+        https: no
         ratelimit: 100
 
 The ``host`` key, of course, controls the Web server hostname (and port,
 optionally) that will be contacted by beets (default: musicbrainz.org).
+The ``https`` key makes the client use HTTPS instead of HTTP. This setting applies
+only to custom servers. The official MusicBrainz server always uses HTTPS. (Default: no.)
 The server must have search indices enabled (see `Building search indexes`_).
 
 The ``ratelimit`` option, an integer, controls the number of Web service requests
@@ -689,7 +716,7 @@ to one request per second.
 .. _your own MusicBrainz database: https://musicbrainz.org/doc/MusicBrainz_Server/Setup
 .. _main server: https://musicbrainz.org/
 .. _limited: https://musicbrainz.org/doc/XML_Web_Service/Rate_Limiting
-.. _Building search indexes: https://musicbrainz.org/doc/MusicBrainz_Server/Setup#Building_search_indexes
+.. _Building search indexes: https://musicbrainz.org/doc/Development/Search_server_setup
 
 .. _searchlimit:
 
@@ -720,6 +747,17 @@ Note that the only tags supported by this setting are the ones listed in the
 above example.
 
 Default: ``[]``
+
+.. _genres:
+
+genres
+~~~~~~
+
+Use MusicBrainz genre tags to populate the ``genre`` tag.  This will make it a
+semicolon-separated list of all the genres tagged for the release on
+MusicBrainz.
+
+Default: ``no``
 
 .. _match-config:
 

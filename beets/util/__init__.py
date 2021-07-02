@@ -134,6 +134,8 @@ class MoveOperation(Enum):
     COPY = 1
     LINK = 2
     HARDLINK = 3
+    REFLINK = 4
+    REFLINK_AUTO = 5
 
 
 def normpath(path):
@@ -197,6 +199,10 @@ def sorted_walk(path, ignore=(), ignore_hidden=False, logger=None):
         skip = False
         for pat in ignore:
             if fnmatch.fnmatch(base, pat):
+                if logger:
+                    logger.debug(u'ignoring {0} due to ignore rule {1}'.format(
+                        base, pat
+                    ))
                 skip = True
                 break
         if skip:
@@ -543,6 +549,35 @@ def hardlink(path, dest, replace=False):
         else:
             raise FilesystemError(exc, 'link', (path, dest),
                                   traceback.format_exc())
+
+
+def reflink(path, dest, replace=False, fallback=False):
+    """Create a reflink from `dest` to `path`.
+
+    Raise an `OSError` if `dest` already exists, unless `replace` is
+    True. If `path` == `dest`, then do nothing.
+
+    If reflinking fails and `fallback` is enabled, try copying the file
+    instead. Otherwise, raise an error without trying a plain copy.
+
+    May raise an `ImportError` if the `reflink` module is not available.
+    """
+    import reflink as pyreflink
+
+    if samefile(path, dest):
+        return
+
+    if os.path.exists(syspath(dest)) and not replace:
+        raise FilesystemError(u'file exists', 'rename', (path, dest))
+
+    try:
+        pyreflink.reflink(path, dest)
+    except (NotImplementedError, pyreflink.ReflinkImpossibleError):
+        if fallback:
+            copy(path, dest, replace)
+        else:
+            raise FilesystemError(u'OS/filesystem does not support reflinks.',
+                                  'link', (path, dest), traceback.format_exc())
 
 
 def unique_path(path):
@@ -1073,3 +1108,25 @@ def lazy_property(func):
         return value
 
     return wrapper
+
+
+def decode_commandline_path(path):
+    """Prepare a path for substitution into commandline template.
+
+    On Python 3, we need to construct the subprocess commands to invoke as a
+    Unicode string. On Unix, this is a little unfortunate---the OS is
+    expecting bytes---so we use surrogate escaping and decode with the
+    argument encoding, which is the same encoding that will then be
+    *reversed* to recover the same bytes before invoking the OS. On
+    Windows, we want to preserve the Unicode filename "as is."
+    """
+    if six.PY2:
+        # On Python 2, substitute the bytestring directly into the template.
+        return path
+    else:
+        # On Python 3, the template is a Unicode string, which only supports
+        # substitution of Unicode variables.
+        if platform.system() == 'Windows':
+            return path.decode(_fsencoding())
+        else:
+            return path.decode(arg_encoding(), 'surrogateescape')
